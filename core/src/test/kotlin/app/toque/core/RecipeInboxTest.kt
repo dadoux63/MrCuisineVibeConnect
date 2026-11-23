@@ -50,7 +50,7 @@ class RecipeInboxTest {
     @Test fun servesThePageWithoutSecret() {
         val (code, body) = call("GET / HTTP/1.1\r\nHost: robot\r\n\r\n".toByteArray())
         assertEquals(200, code)
-        assertTrue(body.contains("Importer une recette Cookomix"))
+        assertTrue(body.contains("Importer une recette Cookomix ou Jow"))
         assertTrue(!body.contains(token))
     }
 

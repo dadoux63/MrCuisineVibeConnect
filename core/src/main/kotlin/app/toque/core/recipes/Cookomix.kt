@@ -470,7 +470,7 @@ object Cookomix {
     fun telechargePhoto(url: String, timeoutMs: Int = 30_000): ByteArray = download(url, URL_PHOTO, MAX_PHOTO, timeoutMs)
 
     /** GET HTTPS ; chaque adresse, redirections comprises, doit vérifier [allowed]. */
-    private fun download(url: String, allowed: Regex, max: Int, timeoutMs: Int): ByteArray {
+    internal fun download(url: String, allowed: Regex, max: Int, timeoutMs: Int, site: String = "Cookomix"): ByteArray {
         var u = url
         repeat(4) {
             if (!allowed.matches(u)) throw Refus("adresse inattendue : $u")
@@ -479,7 +479,7 @@ object Cookomix {
                 c.instanceFollowRedirects = false
                 c.connectTimeout = timeoutMs
                 c.readTimeout = timeoutMs
-                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 6.0) toque-cookomix/1.0 (usage personnel)")
+                c.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 6.0) toque-import/1.0 (usage personnel)")
                 c.setRequestProperty("Accept-Language", "fr-FR,fr;q=0.9")
                 val code = c.responseCode
                 if (code in 300..399) {
@@ -487,7 +487,7 @@ object Cookomix {
                     u = java.net.URL(java.net.URL(u), loc).toString()
                     return@repeat
                 }
-                if (code != 200) throw Refus("Cookomix répond $code")
+                if (code != 200) throw Refus("$site répond $code")
                 c.inputStream.use { input ->
                     val out = java.io.ByteArrayOutputStream()
                     val buf = ByteArray(16 * 1024)
