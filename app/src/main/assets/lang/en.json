@@ -711,5 +711,11 @@
   "Publiée sur toqueapp.org · toucher pour changer": "Published on toqueapp.org · tap to change",
   "Sur votre compte toqueapp.org (privée) · toucher pour changer": "On your toqueapp.org account (private) · tap to change",
   "1 de la communauté": "1 from the community",
-  "%d de la communauté": "%d from the community"
+  "%d de la communauté": "%d from the community",
+  "Domotique": "Home automation",
+  "Publier l'état sur le réseau local": "Publish the status on the local network",
+  "Lecture seule : température, vitesse, poids, couvercle, bol, programme et temps restant. Personne ne peut lancer, arrêter ni régler le robot par le réseau. À n'activer que sur un Wi-Fi de confiance.": "Read only: temperature, speed, weight, lid, bowl, programme and time left. Nobody can start, stop or adjust the robot over the network. Only turn this on with a trusted Wi-Fi.",
+  "Nouveau jeton": "New token",
+  "Désactivé.": "Off.",
+  "Adresse : %s · port %d\nJeton : %s": "Address: %s · port %d\nToken: %s"
 }
