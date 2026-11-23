@@ -20,6 +20,7 @@ import app.toque.core.i18n.I18n
 import app.toque.core.i18n.tr
 import app.toque.core.machine.RootShell
 import app.toque.core.machine.Snapshot
+import app.toque.core.net.StatusServer
 import app.toque.core.time.ZoneLookup
 import app.toque.core.update.Release
 import app.toque.recipes.LidlSync
@@ -80,6 +81,7 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
     /** Point sur « Avancé » et phrase au-dessus de « Machine » : tant que Toque ne pilote pas le vrai moteur. */
     private lateinit var modeDot: View
     private lateinit var modeText: TextView
+    private lateinit var homeText: TextView
     private var settingTime = false
     private var mode = a.prefs.mode
 
@@ -524,6 +526,25 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
         renderModes()
         line(p)
 
+        // Domotique : état en lecture seule pour Home Assistant (aucune commande à distance).
+        group(p, tr("Domotique"))
+        p.addView(toggle(tr("Publier l'état sur le réseau local"), a.prefs.homeEnabled) { on ->
+            if (on && a.prefs.homeToken.length < StatusServer.MIN_TOKEN) a.prefs.homeToken = StatusServer.newToken()
+            a.prefs.homeEnabled = on
+            a.machine.reconfigure { a.refusal(it) }
+            renderHome()
+        }, Ui.lp(t = 8))
+        p.addView(hint(tr("Lecture seule : température, vitesse, poids, couvercle, bol, programme et temps restant. Personne ne peut lancer, arrêter ni régler le robot par le réseau. À n'activer que sur un Wi-Fi de confiance.")),
+            Ui.lp(t = 4))
+        homeText = hint("").apply { setTextIsSelectable(true) }
+        p.addView(setting(homeText, Ui.button(c, tr("Nouveau jeton"), Ui.Style.SECONDARY, Icon.Kind.SYNC, height = 52, textSize = 18f) {
+            a.prefs.homeToken = StatusServer.newToken()
+            if (a.prefs.homeEnabled) a.machine.reconfigure { a.refusal(it) }
+            renderHome()
+        }), Ui.lp(t = 8, b = 8))
+        renderHome()
+        line(p)
+
         // Les outils, deux par ligne.
         val tools = listOf<Pair<String, () -> Unit>>(
             tr("Diagnostic de la base moteur") to { a.push(DiagnosticsScreen(a)) },
@@ -561,6 +582,20 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
             letterSpacing = 0.08f
         }, Ui.lp(t = 14, b = 2))
     }
+
+    /** Adresse et jeton à recopier dans Home Assistant. */
+    private fun renderHome() {
+        homeText.text = if (!a.prefs.homeEnabled) tr("Désactivé.")
+        else tr("Adresse : %s · port %d\nJeton : %s", localAddress() ?: "?", a.prefs.homePort, a.prefs.homeToken)
+    }
+
+    /** Adresse IPv4 du robot sur le réseau local (sans permission Wi-Fi). */
+    private fun localAddress(): String? = try {
+        java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { it is java.net.Inet4Address && !it.isLoopbackAddress }?.hostAddress
+    } catch (_: Exception) { null }
 
     /** Trait fin entre deux réglages. */
     private fun line(page: LinearLayout) {

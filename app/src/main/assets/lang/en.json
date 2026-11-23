@@ -798,5 +798,11 @@
   "Remettre la balance à zéro quand le bol vide est replacé": "Zero the scale when the empty bowl is put back",
   "Tare automatique aux étapes de pesée des recettes": "Automatic tare on recipe weighing steps",
   "Toque compare la masse posée au bol vide mémorisé : un bol replacé avec du contenu n'est jamais remis à zéro.": "Toque compares the weight on the base with the remembered empty bowl: a bowl put back with food in it is never zeroed.",
-  "Bol retiré": "Bowl removed"
+  "Bol retiré": "Bowl removed",
+  "Domotique": "Home automation",
+  "Publier l'état sur le réseau local": "Publish the status on the local network",
+  "Lecture seule : température, vitesse, poids, couvercle, bol, programme et temps restant. Personne ne peut lancer, arrêter ni régler le robot par le réseau. À n'activer que sur un Wi-Fi de confiance.": "Read only: temperature, speed, weight, lid, bowl, programme and time left. Nobody can start, stop or adjust the robot over the network. Only turn this on with a trusted Wi-Fi.",
+  "Nouveau jeton": "New token",
+  "Désactivé.": "Off.",
+  "Adresse : %s · port %d\nJeton : %s": "Address: %s · port %d\nToken: %s"
 }
