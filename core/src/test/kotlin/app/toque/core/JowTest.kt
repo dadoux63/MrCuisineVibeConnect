@@ -83,13 +83,13 @@ class JowTest {
         val s = steps(r)
         assertTrue(s[0]["machine"] == null)                                   // oignon en gros morceaux…
         val m = s.mapNotNull { it["machine"] as Map<*, *>? }
-        // hacher les carottes 5 s ; oignon ajouté et haché grossièrement 4 s ; revenir 4 min (borne haute) ;
+        // oignon et carottes hachés ensemble 4 s ; revenir 4 min (borne haute) ;
         // concentré 1 min ; mijoter 12 min + 5 min de montée, feu doux ; crème 2 min.
-        assertEquals(listOf(5, 4, 240, 60, 17 * 60, 120), m.map { it["seconds"] })
-        assertEquals(listOf(0, 0, 120, 100, 90, 100), m.map { it["tempC"] })
-        assertEquals(listOf(5, 4, 1, 1, 1, 1), m.map { it["speed"] })
-        assertEquals(listOf(false, false, true, true, true, true), m.map { it["reverse"] })
-        assertTrue((s[2]["text"] as String).startsWith("Ajouter au hachis du bol"))
+        assertEquals(listOf(4, 240, 60, 17 * 60, 120), m.map { it["seconds"] })
+        assertEquals(listOf(0, 120, 100, 90, 100), m.map { it["tempC"] })
+        assertEquals(listOf(4, 1, 1, 1, 1), m.map { it["speed"] })
+        assertEquals(listOf(false, true, true, true, true), m.map { it["reverse"] })
+        assertTrue((s[2]["text"] as String).startsWith("Mettre dans le bol : 1 Oignon, 300 g Carotte"))
         assertTrue((s[3]["text"] as String).startsWith("Laisser le hachis dans le bol."))
         assertTrue(s.any { (it["text"] as String).contains("600 ml d'eau") })
         assertTrue(s.first { (it["text"] as String).contains("effiloch") }["machine"] == null)
