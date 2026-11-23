@@ -125,23 +125,25 @@ class RecipeInbox(
             else -> return send(c, Reply.error(404, "inconnu"))
         }
 
+        // Envoi par le menu Partager (texte brut) : réponse en phrases lisibles ; page web et JSON : réponse JSON.
+        val plain = !header("Content-Type").contains("json", ignoreCase = true)
         val auth = header("Authorization")
         val given = if (auth.startsWith("Bearer ", ignoreCase = true)) auth.substring(7).trim() else ""
         val expected = token()
         if (expected.length < StatusServer.MIN_TOKEN ||
             !MessageDigest.isEqual(given.toByteArray(StandardCharsets.UTF_8), expected.toByteArray(StandardCharsets.UTF_8)))
-            return send(c, Reply.error(401, "jeton absent ou faux"), "WWW-Authenticate: Bearer\r\n")
+            return send(c, Reply.error(401, "jeton absent ou faux"), "WWW-Authenticate: Bearer\r\n", plain)
 
-        val length = header("Content-Length").toLongOrNull() ?: return send(c, Reply.error(411, "longueur absente"))
-        if (length < 0 || length > MAX_BODY) return send(c, Reply.error(413, "requête trop longue"))
-        val body = readBody(input, rest, length.toInt()) ?: return send(c, Reply.error(400, "requête incomplète"))
+        val length = header("Content-Length").toLongOrNull() ?: return send(c, Reply.error(411, "longueur absente"), plain = plain)
+        if (length < 0 || length > MAX_BODY) return send(c, Reply.error(413, "requête trop longue"), plain = plain)
+        val body = readBody(input, rest, length.toInt()) ?: return send(c, Reply.error(400, "requête incomplète"), plain = plain)
         val request = parse(body, header("Content-Type")) ?: return send(c, Reply.error(400,
-            "aucune adresse de recette Cookomix (attendu : https://www.cookomix.com/recettes/…/)"))
+            "aucune adresse de recette Cookomix (attendu : https://www.cookomix.com/recettes/…/)"), plain = plain)
 
         val now = clock()
         synchronized(this) {
             if (lastImport != 0L && now - lastImport in 0 until MIN_INTERVAL_MS)
-                return send(c, Reply.error(429, "une recette à la fois : réessayez dans quelques secondes"))
+                return send(c, Reply.error(429, "une recette à la fois : réessayez dans quelques secondes"), plain = plain)
             lastImport = now
         }
         c.soTimeout = IMPORT_TIMEOUT_MS
@@ -151,7 +153,7 @@ class RecipeInbox(
             log("import impossible : $t")
             Reply.error(500, "import impossible : ${t.message ?: t.javaClass.simpleName}")
         }
-        send(c, reply)
+        send(c, reply, plain = plain)
     }
 
     /** Le corps : [already] (lu avec l'en-tête), puis le reste du flux. */
@@ -183,10 +185,11 @@ class RecipeInbox(
         out.flush()
     }
 
-    private fun send(c: Socket, reply: Reply, extra: String = "") {
-        val bytes = Json.write(reply.body).toByteArray(StandardCharsets.UTF_8)
+    private fun send(c: Socket, reply: Reply, extra: String = "", plain: Boolean = false) {
+        val text = if (plain) asText(reply.body) else Json.write(reply.body)
+        val bytes = text.toByteArray(StandardCharsets.UTF_8)
         val head = "HTTP/1.1 ${reply.code} ${REASONS[reply.code] ?: "Error"}\r\n" +
-            "Content-Type: application/json; charset=utf-8\r\n" +
+            "Content-Type: ${if (plain) "text/plain" else "application/json"}; charset=utf-8\r\n" +
             "Content-Length: ${bytes.size}\r\n" +
             "Cache-Control: no-store\r\n" +
             "Connection: close\r\n" + extra + "\r\n"
@@ -197,6 +200,18 @@ class RecipeInbox(
     }
 
     companion object {
+        /** Réponse lisible telle quelle dans une fenêtre du téléphone. */
+        fun asText(body: Map<String, Any?>): String {
+            if (body["ok"] != true) return "Erreur : " + (body["error"] ?: "inconnue")
+            val sb = StringBuilder(body["message"]?.toString().orEmpty())
+            val w = (body["warnings"] as? List<*>).orEmpty()
+            if (w.isNotEmpty()) {
+                sb.append("\n\nÀ vérifier :")
+                for (x in w) sb.append("\n• ").append(x)
+            }
+            return sb.toString()
+        }
+
         const val API = "/api/v1/recipes"
         const val DEFAULT_PORT = 8767
         /** Une page Cookomix complète pèse quelques centaines de Ko. */
