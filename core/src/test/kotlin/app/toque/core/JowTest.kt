@@ -81,14 +81,16 @@ class JowTest {
         assertEquals(3, r.covers)
         assertEquals("https://jow.fr/recipes/essai-soupe-poulet-aaaaaaaaaaaaaaaaaaaa", (r.recipe["notes"] as String).lines().first().removePrefix("Recette Jow : "))
         val s = steps(r)
-        assertTrue(s[0]["machine"] == null)                                   // lamelles : au couteau
+        assertTrue(s[0]["machine"] == null)                                   // oignon en gros morceaux…
         val m = s.mapNotNull { it["machine"] as Map<*, *>? }
-        // hacher 5 s ; revenir 4 min (borne haute) ; concentré 1 min ; mijoter 12 min + 5 min de montée, feu doux ; crème 2 min.
-        assertEquals(listOf(5, 240, 60, 17 * 60, 120), m.map { it["seconds"] })
-        assertEquals(listOf(0, 120, 100, 90, 100), m.map { it["tempC"] })
-        assertEquals(listOf(5, 1, 1, 1, 1), m.map { it["speed"] })
-        assertEquals(listOf(false, true, true, true, true), m.map { it["reverse"] })
-        assertTrue((s[2]["text"] as String).startsWith("Laisser le hachis dans le bol."))
+        // hacher les carottes 5 s ; oignon ajouté et haché grossièrement 4 s ; revenir 4 min (borne haute) ;
+        // concentré 1 min ; mijoter 12 min + 5 min de montée, feu doux ; crème 2 min.
+        assertEquals(listOf(5, 4, 240, 60, 17 * 60, 120), m.map { it["seconds"] })
+        assertEquals(listOf(0, 0, 120, 100, 90, 100), m.map { it["tempC"] })
+        assertEquals(listOf(5, 4, 1, 1, 1, 1), m.map { it["speed"] })
+        assertEquals(listOf(false, false, true, true, true, true), m.map { it["reverse"] })
+        assertTrue((s[2]["text"] as String).startsWith("Ajouter au hachis du bol"))
+        assertTrue((s[3]["text"] as String).startsWith("Laisser le hachis dans le bol."))
         assertTrue(s.any { (it["text"] as String).contains("600 ml d'eau") })
         assertTrue(s.first { (it["text"] as String).contains("effiloch") }["machine"] == null)
         assertEquals("https://static.jow.fr/550x550/recipes/EssaiSoupe.png", r.photoUrl)
@@ -108,6 +110,19 @@ class JowTest {
         assertTrue(s.any { (it["text"] as String).startsWith("Égoutter") })
         assertTrue(s.first { (it["text"] as String).contains("dorer") }["machine"] == null)
         assertTrue(s.first { (it["text"] as String).contains("enfournez") }["machine"] == null)
-        assertTrue((s.first { (it["text"] as String).startsWith("Mettre dans le bol") }["text"] as String).endsWith("Réserver le hachis à part."))
+        assertTrue((s.first { (it["text"] as String).startsWith("Mettre dans le bol") }["text"] as String).endsWith("Réserver à part."))
+    }
+
+    @Test fun mashedPotatoesWithTheWhisk() {
+        val html = page("essai-gratin").replace("Servez dès la sortie du four.",
+            "Écrasez les pommes de terre à la fourchette avec le beurre.")
+        val r = Jow.convertitPage(html, "", 3, "2026-11-23")
+        val s = steps(r)
+        val puree = s.first { (it["text"] as String).contains("Écraser en purée") }
+        val m = puree["machine"] as Map<*, *>
+        assertEquals("whisk", m["accessory"])
+        assertEquals(3, m["speed"])
+        assertEquals(0, m["tempC"])
+        assertEquals("Retirer le fouet.", s[s.indexOf(puree) + 1]["text"])
     }
 }

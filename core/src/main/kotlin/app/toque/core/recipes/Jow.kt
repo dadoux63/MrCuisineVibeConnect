@@ -105,13 +105,17 @@ object Jow {
     }
 
     // --- Étapes ----------------------------------------------------------------------------------
-    private class Etat(val couverts: Int, val eau: Double?, val pates: Double?, val etapes: MutableList<Map<String, Any?>>) {
+    private class Etat(val couverts: Int, val eau: Double?, val pates: Double?, val etapes: MutableList<Map<String, Any?>>,
+                       val soupe: Boolean = false, val auDressage: String = "") {
         /** Le bol contient une préparation en cours (cuisson, eau de cuisson…). */
         var bolOccupe = false
         /** Indice (dans [etapes]) du hachis resté dans le bol, en attente de la suite ; -1 : aucun. */
         var hachis = -1
         val hachisDansLeBol: Boolean get() = hachis >= 0
         val approx = ArrayList<String>()
+        /** Légumes de soupe préparés en gros morceaux, hachés au robot juste avant la cuisson. */
+        val aHacher = ArrayList<String>()
+        var aHacherCru = false
 
         /** Le hachis ne sert pas à l'étape qui suit dans le bol : on le réserve. */
         fun reserveHachis() {
@@ -148,9 +152,9 @@ object Jow {
         return r.joinToString(" / ")
     }
 
-    private fun machine(sec: Int, tempC: Int, vitesse: Int, inverse: Boolean) = linkedMapOf<String, Any?>(
+    private fun machine(sec: Int, tempC: Int, vitesse: Int, inverse: Boolean, fouet: Boolean = false) = linkedMapOf<String, Any?>(
         "program" to "manuel", "seconds" to sec, "speed" to vitesse, "tempC" to tempC,
-        "reverse" to inverse, "accessory" to "blade", "pulses" to 0,
+        "reverse" to inverse, "accessory" to if (fouet) "whisk" else "blade", "pulses" to 0,
     )
 
     /** Texte de Jow adapté au robot : « dans une casserole » → « dans le bol », plus de feu. */
@@ -179,6 +183,8 @@ object Jow {
             "$q $u${m.groupValues[3]}"
         }
 
+    private fun etapeSansHachage(brut: String, ingredients: String, e: Etat, n: Int): List<Map<String, Any?>> = etape(brut, ingredients, e, n)
+
     /** Une étape de Jow → une ou plusieurs étapes Toque. */
     private fun etape(brut: String, ingredients: String, e: Etat, n: Int): List<Map<String, Any?>> {
         val texte = adapte(parPersonne(brut, e.couverts))
@@ -188,7 +194,7 @@ object Jow {
             return listOf(linkedMapOf("text" to t))
         }
         fun robot(verbe: String, sec: Int, tempC: Int, vitesse: Int, inverse: Boolean, notes: List<String> = emptyList(),
-                  avant: String = "", propre: String? = null): Map<String, Any?> {
+                  avant: String = "", propre: String? = null, fouet: Boolean = false): Map<String, Any?> {
             var t = (if (avant.isNotEmpty()) "$avant " else "") + (propre ?: texte)
             if (ingredients.isNotEmpty()) t += " Avec : $ingredients."
             t += " $verbe : ${reglage(sec, tempC, vitesse, inverse)}."
@@ -196,7 +202,7 @@ object Jow {
                 t += " ⚠ " + notes.joinToString(" ; ") + "."
                 e.approx += "étape $n : " + notes.joinToString(" ; ")
             }
-            return linkedMapOf("text" to t, "machine" to machine(minOf(sec, DUREE_MAX_S), tempC, vitesse, inverse), "needsReview" to true)
+            return linkedMapOf("text" to t, "machine" to machine(minOf(sec, DUREE_MAX_S), tempC, vitesse, inverse, fouet), "needsReview" to true)
         }
 
         val dansUnRecipientRobot = RECIPIENT_ROBOT.containsMatchIn(s)
@@ -215,9 +221,18 @@ object Jow {
             return main("au four, hors robot")
         }
         if (Regex("\\beffilochez").containsMatchIn(s)) return main("à la main")
-        if (Regex("\\b(ecrasez|presse-puree)").containsMatchIn(s)) {
-            e.bolOccupe = false
-            return main("à la main : la lame rendrait la purée élastique")
+        if (Regex("\\b(ecrasez|presse-puree)").containsMatchIn(s) && Regex("pommes? de terre|patates?|puree").containsMatchIn(s)) {
+            // Au fouet, pas à la lame (qui rendrait la purée élastique). Pommes de terre égouttées, remises dans le bol.
+            if (e.hachisDansLeBol) e.reserveHachis()
+            val avec = Regex("\\bavec ([^.]+?)\\.").find(brut)?.groupValues?.get(1)?.trim()
+            val propre = "Égoutter les pommes de terre et les remettre dans le bol, sans l'eau" +
+                (if (avec != null) ", avec $avec" else "") + ". Mettre le fouet."
+            e.bolOccupe = true
+            return listOf(
+                robot("Écraser en purée", 30, 0, 3, false, listOf("au fouet, vitesse 3 : prolonger de 10 s si des morceaux restent"),
+                    propre = propre, fouet = true),
+                linkedMapOf<String, Any?>("text" to "Retirer le fouet."),
+            )
         }
         if (Regex("\\b(faites (dorer|griller|colorer)|faites saisir|saisissez|grillez|dorez)\\b").containsMatchIn(s)) {
             e.bolOccupe = false
@@ -268,13 +283,19 @@ object Jow {
                 val r = robot("Mixer", duree(brut) ?: 60, 0, 8, false, listOf("monter la vitesse progressivement ; si c'est chaud, bouchon doseur en place"))
                 return listOf(r)
             }
-            if (e.bolOccupe || e.hachisDansLeBol || Regex("pendant ce temps").containsMatchIn(s)) return main("au couteau : le bol est occupé")
+            if (e.bolOccupe || Regex("pendant ce temps").containsMatchIn(s)) return main("au couteau : le bol est occupé")
+            if (e.hachisDansLeBol) {
+                // Deux hachis à la suite : le premier est réservé avant le second.
+                e.reserveHachis()
+            }
             val (verbe, sec, v) = when (hache) {
                 "rapez" -> Triple("Râper", 10, 8)
                 "concassez" -> Triple("Concasser", 3, 5)
                 else -> Triple("Hacher", 5, 5)
             }
             e.reserveHachis()
+            if (hache == "rapez") return listOf(robot(verbe, sec, 0, v, false, emptyList(), "Mettre dans le bol, en morceaux.") .let {
+                LinkedHashMap(it).apply { put("text", (get("text") as String) + " Réserver à part.") } })
             e.hachis = e.etapes.size
             return listOf(robot(verbe, sec, 0, v, false, emptyList(), "Mettre dans le bol, en morceaux."))
         }
@@ -286,7 +307,20 @@ object Jow {
         val chauffeHuile = Regex("faites chauffer").containsMatchIn(s) && Regex("\\b(huile|beurre)\\b").containsMatchIn(s)
         val enCours = e.bolOccupe || dansUnRecipientRobot || e.hachisDansLeBol
 
+        // Légumes en attente : hachés ensemble, juste avant la première cuisson au bol.
+        fun hachageDiffere(): List<Map<String, Any?>> {
+            if (e.aHacher.isEmpty() || e.bolOccupe) return emptyList()
+            val notes = arrayListOf("hachis plutôt que des morceaux taillés, sans gêne dans un bouillon")
+            if (e.aHacherCru) notes.add(0, "garder quelques lamelles d'oignon crues pour le service")
+            val avant = if (e.hachisDansLeBol) "Ajouter au hachis du bol :" else "Mettre dans le bol :"
+            val t = robot("Hacher grossièrement", 4, 0, 4, false, notes, propre = "$avant ${e.aHacher.joinToString(", ")}.")
+            e.aHacher.clear()
+            e.hachis = e.etapes.size
+            return listOf(t)
+        }
         if (!ailleurs && (dansUnRecipientRobot || e.bolOccupe) && (revenir || chauffeHuile)) {
+            val avantTout = hachageDiffere()
+            if (avantTout.isNotEmpty()) return avantTout + etapeSansHachage(brut, ingredients, e, n + 1)
             val notes = ArrayList<String>()
             val d = duree(brut) ?: 180.also { notes += "durée non indiquée : 3 min" }
             val avant = if (e.hachisDansLeBol) "Laisser le hachis dans le bol." else ""
@@ -295,7 +329,9 @@ object Jow {
             val r = robot("Faire revenir", d, REVENIR_C, 1, true, notes, avant)
             return listOf(r) + (if (sortDuBol) listOf(linkedMapOf<String, Any?>("text" to "Transvaser le contenu du bol dans un récipient.")).also { e.bolOccupe = false } else emptyList())
         }
-        if (!ailleurs && enCours && (cuire || melangeMinute)) {
+        if (!ailleurs && (enCours || e.aHacher.isNotEmpty()) && (cuire || melangeMinute)) {
+            val avantTout = hachageDiffere()
+            if (avantTout.isNotEmpty()) return avantTout + etapeSansHachage(brut, ingredients, e, n + 1)
             val notes = ArrayList<String>()
             var d = duree(brut) ?: 300.also { notes += "durée non indiquée : 5 min" }
             val doux = Regex("feu doux|fremir|fremissement").containsMatchIn(s)
@@ -320,7 +356,31 @@ object Jow {
             return listOf(r) + (if (sortDuBol) listOf(linkedMapOf<String, Any?>("text" to "Transvaser le contenu du bol dans un récipient.")).also { e.bolOccupe = false } else emptyList())
         }
 
-        // 5. Le reste : à la main (découpe, mélange dans un saladier…).
+        // 5. Mélange à froid « dans un saladier » quand le bol est libre.
+        if (Regex("\\bdans un saladier\\b").containsMatchIn(s) && Regex("\\bmelangez\\b").containsMatchIn(s) &&
+            !Regex("\\b(cuire|chauff|revenir|mijoter)").containsMatchIn(s) && !Regex("pendant ce temps").containsMatchIn(s)) {
+            if (!e.bolOccupe) {
+                val avant = if (e.hachisDansLeBol) "Laisser le hachis dans le bol." else ""
+                e.hachis = -1
+                val t = robot("Mélanger", 10, 0, 3, true, emptyList(), avant,
+                    propre = texte.replace(Regex("\\bDans un saladier\\b"), "Dans le bol").replace(Regex("\\bdans un saladier\\b"), "dans le bol"))
+                e.hachis = e.etapes.size   // le mélange attend la suite, ou sera réservé
+                return listOf(t)
+            }
+        }
+
+        // 5 bis. Soupes et mijotés : oignons, poireaux, carottes hachés grossièrement plutôt que taillés.
+        val legume = Regex("\\b(oignons?|echalotes?|poireaux?|carottes?|celeri|poivrons?|ail)\\b").find(s)?.value
+        if (e.soupe && legume != null && !e.bolOccupe && !Regex("pendant ce temps").containsMatchIn(s) &&
+            Regex("\\b(lamelles|rondelles|demi-lunes|des|morceaux|emincez|ciselez|batonnets)\\b").containsMatchIn(s)) {
+            if (legume.startsWith("oignon") && e.auDressage.contains("oignon")) e.aHacherCru = true
+            e.aHacher += ingredients.ifEmpty { legume }
+            return listOf(linkedMapOf("text" to Regex("\\b(en )?(fines |grosses )?(lamelles|rondelles|demi-lunes|dés|bâtonnets)\\b[^.,]*", I)
+                .replace(texte, "en gros morceaux").replace(Regex("\\bémincez-le finement\\b", I), "coupez-le en tronçons") +
+                " (le robot les hachera avant la cuisson)"))
+        }
+
+        // 6. Le reste : à la main (découpe, mélange dans un saladier occupé…).
         if (sortDuBol) e.bolOccupe = false
         if (Regex("\\b(lamelles|rondelles|demi-lunes|cubes|dés|tranches|morceaux|bâtonnets|quartiers|julienne)\\b", I).containsMatchIn(brut) &&
             Regex("\\b(coupez|emincez|taillez|detaillez)\\b").containsMatchIn(s)) return main("au couteau : le robot hache, il ne tranche pas")
@@ -365,8 +425,38 @@ object Jow {
             .filter { (it["name"] as String).isNotEmpty() }
 
         val etapes = ArrayList<Map<String, Any?>>()
-        val e = Etat(n, eau, pates, etapes)
-        for (d in etapesJow) {
+        val famille0 = sa(r["family"].obj().str("name").orEmpty() + " " + titre)
+        val soupe = Regex("\\b(bouillon|soupe|veloute|potage|mijote|curry|chili|ragout|blanquette|minestrone|ramen|pot-au-feu)").containsMatchIn(famille0)
+        val dernier = sa(etapesJow.lastOrNull()?.str("label").orEmpty())
+        val e = Etat(n, eau, pates, etapes, soupe, dernier)
+
+        // Pré-tri : un hachis « pendant ce temps » (persil, ail…) pendant une cuisson au bol est fait
+        // avant, au robot ; un fromage « râpé » sans étape de râpage est râpé au début.
+        val ordre = ArrayList(etapesJow)
+        val premierBol = ordre.indexOfFirst { val t = sa(it.str("label").orEmpty()); RECIPIENT_ROBOT.containsMatchIn(t) || Regex("eau bouillante").containsMatchIn(t) }
+        if (premierBol >= 0) {
+            val avances = ordre.withIndex().filter { (i, d) ->
+                val t = sa(d.str("label").orEmpty())
+                i > premierBol && Regex("^pendant ce temps,?\\s*(hachez|ciselez|rapez)\\b").containsMatchIn(t)
+            }
+            for ((_, d) in avances.reversed()) ordre.remove(d)
+            avances.forEachIndexed { k, (_, d) ->
+                val sans = (d.str("label") ?: "").replace(Regex("^\\s*Pendant ce temps,?\\s*", I), "").replaceFirstChar { it.uppercaseChar() }
+                ordre.add(premierBol + k, LinkedHashMap(d).apply { put("label", sans) })
+                approx += "« ${sans.trimEnd('.')} » avancé avant la cuisson, pour le faire au robot"
+            }
+        }
+        val fromages = r["constituents"].list().map { it.obj() }.filter {
+            Regex("\\b(comte|parmesan|emmental|gruyere|cheddar|beaufort|grana|pecorino|mimolette)\\b").containsMatchIn(sa(it.str("name").orEmpty()))
+        }
+        val toutLeTexte = sa(etapesJow.joinToString(" ") { it.str("label").orEmpty() })
+        val debutRapage = if (ordre.isNotEmpty() && sa(ordre[0].str("label").orEmpty()).startsWith("prechauff")) 1 else 0
+        for (f in fromages.reversed()) {
+            val nom = sa(f.str("name").orEmpty()).split(' ', '(').first()
+            if (Regex("\\b$nom (rape|en poudre)").containsMatchIn(toutLeTexte) && !Regex("\\brapez\\b[^.]*\\b$nom").containsMatchIn(toutLeTexte))
+                ordre.add(debutRapage, linkedMapOf("label" to "Râpez le ${f.str("name")!!.lowercase()}.", "involvedIngredients" to listOf(mapOf("id" to f.str("id")))))
+        }
+        for (d in ordre) {
             val label = (d.str("label") ?: "").trim()
             if (label.isEmpty()) continue
             val impliques = d["involvedIngredients"].list().mapNotNull { parId[it.obj().str("id")] }.joinToString(", ")
