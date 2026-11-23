@@ -303,6 +303,16 @@ class Prefs(context: Context) {
             p.edit().putString("homeToken", v).commit()
         }
 
+    /**
+     * Recevoir l'adresse d'une recette Cookomix depuis le téléphone (page web et API sur le réseau
+     * local, port [app.toque.core.net.RecipeInbox.DEFAULT_PORT]), éteint par défaut. Même jeton que la domotique.
+     */
+    var cookomixInbox: Boolean
+        get() = p.getBoolean("cookomixInbox", false)
+        set(v) {
+            p.edit().putBoolean("cookomixInbox", v).commit()
+        }
+
     /** Prévenir quand une nouvelle version de Toque est publiée (au démarrage et au réveil). */
     var updateAlerts: Boolean
         get() = p.getBoolean("updateAlerts", true)

@@ -62,6 +62,8 @@ class ToqueApp : Application() {
         }
         log.write("interface", "démarrage")
         TimeSync.start(this, prefs, log)
+        // Recettes Cookomix envoyées depuis le téléphone (si activé dans Réglages › Mes recettes).
+        app.toque.recipes.CookomixInbox.apply(this)
     }
 
     private fun isMainProcess(): Boolean {
