@@ -116,6 +116,27 @@ class Prefs(context: Context) {
             p.edit().putBoolean("hotRamp", v).commit()
         }
 
+    /** Recettes : tare automatique en arrivant sur une étape de pesée. */
+    var autoTareSteps: Boolean
+        get() = p.getBoolean("autoTareSteps", true)
+        set(v) {
+            p.edit().putBoolean("autoTareSteps", v).commit()
+        }
+
+    /** Balance remise à zéro quand le bol vide est replacé sur le socle. */
+    var bowlAutoZero: Boolean
+        get() = p.getBoolean("bowlAutoZero", true)
+        set(v) {
+            p.edit().putBoolean("bowlAutoZero", v).commit()
+        }
+
+    /** Masse du bol vide apprise (g), 0 = inconnue. */
+    var emptyBowlG: Int
+        get() = p.getInt("emptyBowlG", 0)
+        set(v) {
+            p.edit().putInt("emptyBowlG", v).commit()
+        }
+
     /** Recettes : enchaîner sans appui les étapes machine qui se suivent sans geste à faire. */
     var chainSteps: Boolean
         get() = p.getBoolean("chainSteps", true)
