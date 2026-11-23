@@ -154,8 +154,15 @@ Port of the `own-twrp` step of [Wuki60/MrCuisineVibeConnect v0.7.1](https://gith
   and every write is read back. If TWRP does not start, `unroot --download-mode` puts the original
   `boot` back.
 
-Upstream did this end to end on one SKMC 1100 A1 from Windows in November 2026. This Mac/mtkclient
-port has not been run on an SKMC 1100 yet: tell the person.
+Upstream did this end to end on one SKMC 1100 A1 from Windows in November 2026. From a Mac, it was
+done once, on 23 November 2026, on another SKMC 1100 A1 (firmware 4924, kernel and device tree
+byte-identical to upstream's: 6,524,058 bytes, SHA-256 `fe40074a…8471`; MacBook Air, Intel). There,
+mtkclient was a manual install (not the one `prepare` sets up), so the download-mode reads and the
+TWRP write were run by hand with the same `ro`/`wo` commands this script uses, and the image was
+built with `bootimg_tool.py own-twrp` (11,513,856 bytes). TWRP started with a stable picture and
+working touch; `root`, `flash-root` (writing `twrp-own-kernel.img` into `recovery`), `android`,
+`install` (Toque 0.7.1) and `wifi` then ran from this script unchanged. Tell the person that the
+script's own `backup`/`own-twrp`/`flash-twrp` path has not itself been run on an SKMC 1100.
 
 ### Power-on rules (the source of most confusion)
 
@@ -237,6 +244,8 @@ and without macFUSE the FUSE package stops mtkclient from starting
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| SKMC 1100: Diagnostic shows 0 °C at rest and during the first minutes of heating | The base reports the temperature in steps (0, 37, 45, 50… °C), as with the stock app: 0 below 37 °C | Normal. Seen on an SKMC 1100 A1: 0 → 37 → 45 → 50 → 60 °C at a 60 °C setting, then the "above target" bit |
+| SKMC 1100: Diagnostic shows "0 tr/min" while the blade turns (speed 2) | The base sends the target speed (bytes 7–8) but leaves the actual speed (bytes 9–10) at 0 | Display only, as far as seen; not checked whether any Toque check relies on the actual speed |
 | mtkclient waits forever (*Waiting for device*) | A↔C cable, wrong port, USB-C port without adapter, or the robot was already on | A↔A cable, right-hand "Android USB" port, USB-C → USB-A adapter; robot off, then on while the step waits |
 | *Handshake failed, retrying...* every 10 s | Normal while mtkclient waits for the robot (serial driver) | Have the person switch the robot on, once |
 | mtkclient sees the robot, then *Sync error* or *Failed to upload da* | mtkclient without its macOS serial fixes, or the robot was already in download mode | `prepare`; robot off; run the step again; else the Windows fallback above |
