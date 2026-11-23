@@ -812,5 +812,8 @@
   "Téléchargement impossible depuis le robot : %s": "The robot could not download the page: %s",
   "« %s » %s dans Mes recettes : %d ingrédients, %d étapes dont %d réglages machine, tous à vérifier sur le robot.": "“%s” %s in My recipes: %d ingredients, %d steps including %d machine settings, all to be checked on the robot.",
   "ajoutée": "added",
-  "mise à jour": "updated"
+  "mise à jour": "updated",
+  "pas de photo Cookomix dans la page": "no Cookomix photo in the page",
+  "photo non ajoutée : %s": "photo not added: %s",
+  "Photo ajoutée.": "Photo added."
 }

@@ -1,5 +1,7 @@
 package app.toque.recipes
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -11,6 +13,9 @@ import app.toque.core.recipes.Cookomix
 import app.toque.core.recipes.RecipeCodec
 import app.toque.core.recipes.RecipeSource
 import app.toque.core.recipes.UserRecipes
+import java.io.File
+import java.io.FileOutputStream
+import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -70,8 +75,23 @@ object CookomixInbox {
         var recipe = UserRecipes.imported(decoded)
         UserRecipes.problem(recipe)?.let { return RecipeInbox.Reply.error(422, it) }
         val before = app.recipes.get(recipe.id)
-        // Une photo déjà ajoutée à la main est gardée (comme l'outil du Mac).
+        // Sans photo demandée (ou si elle échoue), une photo déjà présente est gardée.
         if (before != null && before.image.isNotEmpty()) recipe = recipe.copy(image = before.image)
+        val warnings = ArrayList(converted.approx)
+        var photo = false
+        if (req.photo) {
+            val src = converted.photoUrl
+            if (src == null) warnings += tr("pas de photo Cookomix dans la page")
+            else try {
+                val name = recipe.id.removePrefix(UserRecipes.ID_PREFIX) + ".jpg"
+                savePhoto(Cookomix.telechargePhoto(src), File(app.recipes.imagesDir, name))
+                recipe = recipe.copy(image = name)
+                photo = true
+            } catch (e: Exception) {
+                app.log.write("cookomix", "photo non ajoutée $src : $e")
+                warnings += tr("photo non ajoutée : %s", e.message ?: e.toString())
+            }
+        }
         app.recipes.upsertAll(listOf(recipe), rebuild = false)
         // L'index de recherche est reconstruit à part : la réponse part tout de suite.
         Thread({
@@ -82,9 +102,10 @@ object CookomixInbox {
         }, "toque-inbox-index").start()
         val machine = recipe.steps.count { it.machine != null }
         app.log.write("cookomix", "${if (before == null) "ajoutée" else "mise à jour"} : ${recipe.id} (${recipe.steps.size} étapes, " +
-            "$machine réglages, ${converted.approx.size} adaptations)")
+            "$machine réglages, ${converted.approx.size} adaptations, photo : ${if (photo) "oui" else "non"})")
         val message = tr("« %s » %s dans Mes recettes : %d ingrédients, %d étapes dont %d réglages machine, tous à vérifier sur le robot.",
-            recipe.title, if (before == null) tr("ajoutée") else tr("mise à jour"), recipe.allIngredients.size, recipe.steps.size, machine)
+            recipe.title, if (before == null) tr("ajoutée") else tr("mise à jour"), recipe.allIngredients.size, recipe.steps.size, machine) +
+            if (photo) " " + tr("Photo ajoutée.") else ""
         return RecipeInbox.Reply.ok(linkedMapOf(
             "message" to message,
             "id" to recipe.id,
@@ -92,7 +113,37 @@ object CookomixInbox {
             "updated" to (before != null),
             "steps" to recipe.steps.size,
             "machine_steps" to machine,
-            "warnings" to converted.approx,
+            "photo" to photo,
+            "warnings" to warnings,
         ))
+    }
+
+    private const val MAX_WIDTH = 800
+
+    /** Photo réduite à 800 px de large au plus, en JPEG, écrite d'un coup (fichier temporaire puis renommé). */
+    private fun savePhoto(bytes: ByteArray, dest: File) {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0) throw IOException(tr("image illisible"))
+        var sample = 1
+        while (bounds.outWidth / (sample * 2) >= MAX_WIDTH) sample *= 2
+        var bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample })
+            ?: throw IOException(tr("image illisible"))
+        if (bmp.width > MAX_WIDTH) {
+            val scaled = Bitmap.createScaledBitmap(bmp, MAX_WIDTH, bmp.height * MAX_WIDTH / bmp.width, true)
+            if (scaled !== bmp) bmp.recycle()
+            bmp = scaled
+        }
+        dest.parentFile?.mkdirs()
+        val tmp = File(dest.parentFile, dest.name + ".part")
+        try {
+            FileOutputStream(tmp).use { if (!bmp.compress(Bitmap.CompressFormat.JPEG, 85, it)) throw IOException(tr("image illisible")) }
+        } finally {
+            bmp.recycle()
+        }
+        if (!tmp.renameTo(dest)) {
+            dest.delete()
+            if (!tmp.renameTo(dest)) { tmp.delete(); throw IOException(tr("écriture impossible")) }
+        }
     }
 }
