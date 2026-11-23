@@ -31,6 +31,9 @@ object Cookomix {
     private const val DUREE_MAX_RAPIDE_S = 15 * 60
     private const val VAROMA_C = 120
 
+    /** Photos acceptées : fichiers d'images du site lui-même (comme l'outil du Mac). */
+    val URL_PHOTO = Regex("^https://(www\\.)?cookomix\\.com/wp-content/uploads/[^?#]+\\.(jpe?g|png|webp)$", RegexOption.IGNORE_CASE)
+
     /** Seules adresses acceptées : une page de recette de cookomix.com, en HTTPS. */
     val URL_RECETTE = Regex("^https://(www\\.)?cookomix\\.com/recettes/[^/?#]+/?$")
     private val URL_DANS_TEXTE = Regex("https?://(?:www\\.)?cookomix\\.com/recettes/([A-Za-z0-9%._~-]+)", RegexOption.IGNORE_CASE)
@@ -50,7 +53,8 @@ object Cookomix {
     private const val WS = "[\\s\\u00A0\\u2007\\u202F]"
     private val I = RegexOption.IGNORE_CASE
 
-    class Result(val recipe: Map<String, Any?>, val approx: List<String>) {
+    /** [photoUrl] : photo de la recette sur cookomix.com, ou null (usage privé uniquement). */
+    class Result(val recipe: Map<String, Any?>, val approx: List<String>, val photoUrl: String? = null) {
         val title: String get() = recipe["title"] as String
         val id: String get() = recipe["id"] as String
     }
@@ -373,6 +377,15 @@ object Cookomix {
         return if (desc.isNotEmpty()) t(desc) else emptyList()
     }
 
+    /** Adresse de la photo (champ « image » de schema.org : texte, liste ou objet), si elle vient de cookomix.com. */
+    fun photoUrl(recette: Map<String, Any?>): String? {
+        var img = recette["image"]
+        if (img is List<*>) img = img.firstOrNull()
+        if (img is Map<*, *>) img = img["url"]
+        val u = (img as? String)?.trim() ?: return null
+        return u.takeIf { URL_PHOTO.matches(it) }
+    }
+
     // --- Recette complète ------------------------------------------------------------------------
     /**
      * [aujourdhui] : date du jour au format AAAA-MM-JJ (citée dans les notes).
@@ -432,7 +445,7 @@ object Cookomix {
             "ingredients" to listOf(linkedMapOf("group" to "", "items" to ingredients)),
             "steps" to etapes,
         )
-        return Result(toque, e.approx)
+        return Result(toque, e.approx, photoUrl(recette))
     }
 
     /** Page HTML complète → recette Toque. [url] vide : lien canonique de la page. */
@@ -448,10 +461,19 @@ object Cookomix {
      * Télécharge la page d'une recette (HTTPS ; sur le robot, avec les racines d'ExtraRoots).
      * Les redirections ne sont suivies que vers une autre page de recette Cookomix.
      */
-    fun telecharge(url: String, timeoutMs: Int = 30_000): String {
+    fun telecharge(url: String, timeoutMs: Int = 30_000): String =
+        String(download(url, URL_RECETTE, MAX_PAGE, timeoutMs), Charsets.UTF_8)
+
+    const val MAX_PHOTO = 8 * 1024 * 1024
+
+    /** Télécharge la photo d'une recette ([URL_PHOTO] uniquement). */
+    fun telechargePhoto(url: String, timeoutMs: Int = 30_000): ByteArray = download(url, URL_PHOTO, MAX_PHOTO, timeoutMs)
+
+    /** GET HTTPS ; chaque adresse, redirections comprises, doit vérifier [allowed]. */
+    private fun download(url: String, allowed: Regex, max: Int, timeoutMs: Int): ByteArray {
         var u = url
         repeat(4) {
-            if (!URL_RECETTE.matches(u)) throw Refus("adresse inattendue (attendu : https://www.cookomix.com/recettes/<recette>/) : $u")
+            if (!allowed.matches(u)) throw Refus("adresse inattendue : $u")
             val c = java.net.URL(u).openConnection() as java.net.HttpURLConnection
             try {
                 c.instanceFollowRedirects = false
@@ -473,9 +495,9 @@ object Cookomix {
                         val r = input.read(buf)
                         if (r < 0) break
                         out.write(buf, 0, r)
-                        if (out.size() > MAX_PAGE) throw Refus("page trop lourde")
+                        if (out.size() > max) throw Refus("fichier trop lourd")
                     }
-                    return String(out.toByteArray(), Charsets.UTF_8)
+                    return out.toByteArray()
                 }
             } finally {
                 c.disconnect()
