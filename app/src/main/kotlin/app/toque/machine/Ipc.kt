@@ -34,6 +34,7 @@ object Ipc {
     const val RESUME_PORT = 22
     const val SIM = 23
     const val CONFIRM_COLD = 24
+    const val FORGET_BOWL = 25
 
     /** Clé de la langue de l'interface, jointe à chaque commande. */
     const val LANG = "lang"

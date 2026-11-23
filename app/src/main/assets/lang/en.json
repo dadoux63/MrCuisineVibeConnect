@@ -728,5 +728,16 @@
   "mise à jour": "updated",
   "pas de photo %s dans la page": "no %s photo in the page",
   "photo non ajoutée : %s": "photo not added: %s",
-  "Photo ajoutée.": "Photo added."
+  "Photo ajoutée.": "Photo added.",
+  "Bol replacé avec environ %d g de contenu : balance laissée telle quelle": "Bowl put back with about %d g inside: scale left as it is",
+  "Bol replacé. S'il est vide, appuyez sur Tare : Toque retiendra son poids et remettra ensuite la balance à zéro à chaque retour du bol vide.": "Bowl put back. If it is empty, press Tare: Toque will remember its weight and then zero the scale each time the empty bowl is put back.",
+  "Bol vide mémorisé : %d g.": "Empty bowl remembered: %d g.",
+  "Bol vide pas encore mémorisé : retirez le bol, replacez-le vide (avec son couvercle si vous cuisinez avec), puis appuyez sur Tare.": "Empty bowl not remembered yet: lift the bowl, put it back empty (with its lid if you cook with it), then press Tare.",
+  "Bol vide replacé : balance remise à zéro": "Empty bowl put back: scale zeroed",
+  "En passant à une étape « Pesez… », la balance repart de zéro : seul ce que vous ajoutez est compté. Jamais pendant un programme.": "On reaching a “Weigh…” step, the scale starts again from zero: only what you add is counted. Never during a programme.",
+  "Oublier le bol vide mémorisé": "Forget the remembered empty bowl",
+  "Poids du bol vide mémorisé : %d g": "Empty bowl weight remembered: %d g",
+  "Remettre la balance à zéro quand le bol vide est replacé": "Zero the scale when the empty bowl is put back",
+  "Tare automatique aux étapes de pesée des recettes": "Automatic tare on recipe weighing steps",
+  "Toque compare la masse posée au bol vide mémorisé : un bol replacé avec du contenu n'est jamais remis à zéro.": "Toque compares the weight on the base with the remembered empty bowl: a bowl put back with food in it is never zeroed."
 }
