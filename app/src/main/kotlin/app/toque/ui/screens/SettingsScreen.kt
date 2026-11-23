@@ -22,6 +22,7 @@ import app.toque.core.machine.Snapshot
 import app.toque.core.net.StatusServer
 import app.toque.core.time.ZoneLookup
 import app.toque.core.update.Release
+import app.toque.recipes.CookomixInbox
 import app.toque.recipes.LidlSync
 import app.toque.core.recipes.McOnline
 import app.toque.recipes.OnlineSync
@@ -51,6 +52,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
     private lateinit var linkText: TextView
     private lateinit var timeText: TextView
     private lateinit var homeText: TextView
+    private lateinit var inboxText: TextView
     private var settingTime = false
     private var mode = a.prefs.mode
 
@@ -240,6 +242,17 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
         files.addView(Ui.button(c, tr("Exporter"), Ui.Style.SECONDARY, Icon.Kind.UPLOAD, height = 52) { recipeFiles(export = true) }, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         files.addView(Ui.button(c, tr("Importer"), Ui.Style.SECONDARY, Icon.Kind.DOWNLOAD, height = 52) { recipeFiles(export = false) })
         mine.addView(files, Ui.lp(t = 12))
+        // Recette Cookomix envoyée depuis le téléphone : page web et API sur le réseau local.
+        mine.addView(toggle(tr("Recevoir des recettes Cookomix du téléphone"), a.prefs.cookomixInbox) { on ->
+            a.prefs.cookomixInbox = on
+            CookomixInbox.apply(a.app)
+            renderInbox()
+        }, Ui.lp(t = 16))
+        mine.addView(Ui.text(c, tr("Ouvrez l'adresse ci-dessous sur le téléphone (même Wi-Fi), collez l'adresse d'une recette Cookomix : le robot la convertit et l'ajoute ici. Une recette à la fois, pour votre usage personnel. Même jeton que la domotique."),
+            15f, Ui.TEXT3).apply { setLineSpacing(0f, 1.1f) }, Ui.lp(t = 6))
+        inboxText = Ui.text(c, "", 16f, Ui.TEXT2).apply { setLineSpacing(0f, 1.15f); setTextIsSelectable(true) }
+        mine.addView(inboxText, Ui.lp(t = 10))
+        renderInbox()
 
         // ---- Domotique : état en lecture seule pour Home Assistant (aucune commande à distance)
         val home = section(right, tr("Domotique"), Icon.Kind.LINK)
@@ -257,6 +270,7 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
             a.prefs.homeToken = StatusServer.newToken()
             if (a.prefs.homeEnabled) a.machine.reconfigure { a.refusal(it) }
             renderHome()
+            renderInbox()
         }, Ui.lp(Ui.WRAP, Ui.WRAP, t = 10))
         renderHome()
 
@@ -292,6 +306,12 @@ class SettingsScreen(a: MainActivity) : Screen(a) {
     private fun renderHome() {
         homeText.text = if (!a.prefs.homeEnabled) tr("Désactivé.")
         else tr("Adresse : %s · port %d\nJeton : %s", localAddress() ?: "?", a.prefs.homePort, a.prefs.homeToken)
+    }
+
+    /** Adresse à ouvrir sur le téléphone ; le jeton est dans le fragment (#), jamais envoyé sur le réseau par le navigateur. */
+    private fun renderInbox() {
+        inboxText.text = if (!a.prefs.cookomixInbox) tr("Désactivé.")
+        else tr("Sur le téléphone : http://%s:%d/#t=%s", localAddress() ?: "?", CookomixInbox.port, a.prefs.homeToken)
     }
 
     /** Adresse IPv4 du robot sur le réseau local (sans permission Wi-Fi). */
