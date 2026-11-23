@@ -10,6 +10,7 @@ import app.toque.core.i18n.tr
 import app.toque.core.net.RecipeInbox
 import app.toque.core.net.StatusServer
 import app.toque.core.recipes.Cookomix
+import app.toque.core.recipes.Jow
 import app.toque.core.recipes.RecipeCodec
 import app.toque.core.recipes.RecipeSource
 import app.toque.core.recipes.UserRecipes
@@ -21,11 +22,11 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * Reçoit, depuis le téléphone, l'adresse d'une recette Cookomix : la page est téléchargée par le robot,
- * convertie (voir [Cookomix]) puis ajoutée à Mes recettes. Processus de l'interface uniquement : le
+ * Reçoit, depuis le téléphone, l'adresse d'une recette Cookomix ou Jow : la page est téléchargée par le
+ * robot, convertie (voir [Cookomix] et [Jow]) puis ajoutée à Mes recettes. Processus de l'interface uniquement : le
  * pilotage (« :machine ») n'est jamais concerné.
  *
- * Usage strictement personnel (CGU de Cookomix) : une recette à la fois, rien n'est publié.
+ * Usage strictement personnel (CGU de Cookomix et de Jow) : une recette à la fois, rien n'est publié.
  */
 object CookomixInbox {
     private var server: RecipeInbox? = null
@@ -57,7 +58,7 @@ object CookomixInbox {
 
     private fun import(app: ToqueApp, req: RecipeInbox.Request): RecipeInbox.Reply {
         val html = try {
-            req.html ?: Cookomix.telecharge(req.url)
+            req.html ?: if (req.jow) Jow.telecharge(req.url) else Cookomix.telecharge(req.url)
         } catch (e: Cookomix.Refus) {
             return RecipeInbox.Reply.error(422, e.message ?: "adresse refusée")
         } catch (e: Exception) {
@@ -65,26 +66,30 @@ object CookomixInbox {
             return RecipeInbox.Reply.error(502, tr("Téléchargement impossible depuis le robot : %s", e.message ?: e.toString()))
         }
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
-        val converted = try {
-            Cookomix.convertitPage(html, req.url, today)
+        // Les deux convertisseurs rendent la même chose : recette (format de fichier), adaptations, photo.
+        val (map, approx, photoUrl) = try {
+            if (req.jow) Jow.convertitPage(html, req.url, req.couverts, today).let { Triple(it.recipe, it.approx, it.photoUrl) }
+            else Cookomix.convertitPage(html, req.url, today).let { Triple(it.recipe, it.approx, it.photoUrl) }
         } catch (e: Cookomix.Refus) {
             return RecipeInbox.Reply.error(422, e.message ?: "conversion refusée")
         }
-        val decoded = RecipeCodec.fromMap(converted.recipe, RecipeSource.USER)
+        val site = if (req.jow) "Jow" else "Cookomix"
+        val decoded = RecipeCodec.fromMap(map, RecipeSource.USER)
             ?: return RecipeInbox.Reply.error(422, "recette sans titre")
         var recipe = UserRecipes.imported(decoded)
         UserRecipes.problem(recipe)?.let { return RecipeInbox.Reply.error(422, it) }
         val before = app.recipes.get(recipe.id)
         // Sans photo demandée (ou si elle échoue), une photo déjà présente est gardée.
         if (before != null && before.image.isNotEmpty()) recipe = recipe.copy(image = before.image)
-        val warnings = ArrayList(converted.approx)
+        val warnings = ArrayList(approx)
         var photo = false
         if (req.photo) {
-            val src = converted.photoUrl
-            if (src == null) warnings += tr("pas de photo Cookomix dans la page")
+            val src = photoUrl
+            if (src == null) warnings += tr("pas de photo %s dans la page", site)
             else try {
                 val name = recipe.id.removePrefix(UserRecipes.ID_PREFIX) + ".jpg"
-                savePhoto(Cookomix.telechargePhoto(src), File(app.recipes.imagesDir, name))
+                val bytes = if (req.jow) Jow.telechargePhoto(src) else Cookomix.telechargePhoto(src)
+                savePhoto(bytes, File(app.recipes.imagesDir, name))
                 recipe = recipe.copy(image = name)
                 photo = true
             } catch (e: Exception) {
@@ -102,7 +107,7 @@ object CookomixInbox {
         }, "toque-inbox-index").start()
         val machine = recipe.steps.count { it.machine != null }
         app.log.write("cookomix", "${if (before == null) "ajoutée" else "mise à jour"} : ${recipe.id} (${recipe.steps.size} étapes, " +
-            "$machine réglages, ${converted.approx.size} adaptations, photo : ${if (photo) "oui" else "non"})")
+            "$machine réglages, ${approx.size} adaptations, photo : ${if (photo) "oui" else "non"})")
         val message = tr("« %s » %s dans Mes recettes : %d ingrédients, %d étapes dont %d réglages machine, tous à vérifier sur le robot.",
             recipe.title, if (before == null) tr("ajoutée") else tr("mise à jour"), recipe.allIngredients.size, recipe.steps.size, machine) +
             if (photo) " " + tr("Photo ajoutée.") else ""

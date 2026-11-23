@@ -4,6 +4,7 @@ import app.toque.core.json.Json
 import app.toque.core.json.obj
 import app.toque.core.json.str
 import app.toque.core.recipes.Cookomix
+import app.toque.core.recipes.Jow
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -17,15 +18,16 @@ import java.security.MessageDigest
 
 /**
  * « Boîte aux lettres » des recettes : reçoit, depuis le téléphone, l'adresse d'UNE recette Cookomix
- * et la confie à [importer] (téléchargement, conversion, ajout à Mes recettes). Désactivée par défaut.
+ * ou Jow (lien de partage de l'appli, ou page jow.fr) et la confie à [importer] (téléchargement, conversion, ajout à Mes recettes). Désactivée par défaut.
  *
  * - `GET /` : petite page web où coller l'adresse (aucun secret dans la page : le jeton reste sur le
  *   téléphone, dans le fragment `#t=` de l'adresse puis dans le navigateur).
  * - `POST /api/v1/recipes` : jeton obligatoire (`Authorization: Bearer`), corps JSON
  *   `{"url": …}`, `{"text": …}` (texte partagé contenant l'adresse) ou `{"url": …, "html": …}` (page
  *   déjà téléchargée par un autre appareil) ; ou bien texte brut contenant l'adresse.
- * - Seules les adresses `https://www.cookomix.com/recettes/…/` sont acceptées : le robot ne peut pas
- *   servir de relais vers un autre site.
+ * - Seules les adresses `https://www.cookomix.com/recettes/…/` et `https://jow.fr/recipes/…` sont
+ *   acceptées (un lien `app.jow.com/…?recipeId=…` est ramené à la seconde) : le robot ne peut pas
+ *   servir de relais vers un autre site. `"couverts"` (JSON) : nombre de personnes pour Jow.
  * - Une requête à la fois, une recette par requête, [MIN_INTERVAL_MS] entre deux imports : outil
  *   d'import à la demande, pas un aspirateur.
  * - Aucune commande machine : ce serveur ne connaît ni le moteur ni la chauffe. Il tourne dans le
@@ -43,7 +45,9 @@ class RecipeInbox(
      * [html] : page déjà téléchargée (sinon le robot la télécharge lui-même).
      * [photo] : ajouter aussi la photo de la recette (oui par défaut ; `"photo": false` pour s'en passer).
      */
-    class Request(val url: String, val html: String?, val photo: Boolean = true)
+    class Request(val url: String, val html: String?, val photo: Boolean = true, val couverts: Int = Jow.COUVERTS_DEFAUT) {
+        val jow: Boolean get() = Jow.URL_RECETTE.matches(url)
+    }
 
     class Reply(val code: Int, val body: Map<String, Any?>) {
         companion object {
@@ -138,7 +142,7 @@ class RecipeInbox(
         if (length < 0 || length > MAX_BODY) return send(c, Reply.error(413, "requête trop longue"), plain = plain)
         val body = readBody(input, rest, length.toInt()) ?: return send(c, Reply.error(400, "requête incomplète"), plain = plain)
         val request = parse(body, header("Content-Type")) ?: return send(c, Reply.error(400,
-            "aucune adresse de recette Cookomix (attendu : https://www.cookomix.com/recettes/…/)"), plain = plain)
+            "aucune adresse de recette Cookomix ou Jow (attendu : https://www.cookomix.com/recettes/…/ ou un lien de partage Jow)"), plain = plain)
 
         val now = clock()
         synchronized(this) {
@@ -253,15 +257,17 @@ class RecipeInbox(
             val text: String
             var html: String? = null
             var photo = true
+            var couverts = Jow.COUVERTS_DEFAUT
             if (json != null && json.isNotEmpty()) {
                 photo = json["photo"] != false
+                (json["couverts"] as? Number)?.toInt()?.takeIf { it in 1..30 }?.let { couverts = it }
                 text = listOfNotNull(json.str("url"), json.str("text")).joinToString(" ")
                 html = json.str("html")?.takeIf { it.isNotBlank() }
             } else {
                 text = trimmed
             }
-            val url = Cookomix.findUrl(text) ?: return null
-            return Request(url, html, photo)
+            val url = Cookomix.findUrl(text) ?: Jow.findUrl(text) ?: return null
+            return Request(url, html, photo, couverts)
         }
 
         /** Page servie au téléphone : coller l'adresse, envoyer. Aucune ressource extérieure. */
@@ -280,11 +286,14 @@ button{margin-top:14px;width:100%;font:inherit;font-weight:600;padding:14px;bord
 button:disabled{opacity:.5}#out{margin-top:18px;white-space:pre-wrap}.ok{color:var(--ok)}.err{color:var(--err)}
 details{margin-top:28px;color:var(--muted)}label.c{display:flex;gap:10px;align-items:center;font-weight:400}label.c input{width:auto;transform:scale(1.4)}small{color:var(--muted)}
 </style></head><body><main>
-<h1>Importer une recette Cookomix</h1>
+<h1>Importer une recette Cookomix ou Jow</h1>
 <p>Collez l'adresse d'une recette : le robot la convertit et l'ajoute à <b>Mes recettes</b>. Une recette à la fois, pour votre usage personnel.</p>
+<p>Jow : réglages déduits du texte, à vérifier ; four et découpe restent à la main.</p>
 <form id="f">
 <label for="u">Adresse de la recette</label>
-<input id="u" type="url" inputmode="url" autocomplete="off" placeholder="https://www.cookomix.com/recettes/…/" required>
+<input id="u" type="text" inputmode="url" autocomplete="off" placeholder="https://www.cookomix.com/recettes/… ou https://app.jow.com/…" required>
+<label for="n">Personnes (Jow)</label>
+<input id="n" type="number" inputmode="numeric" min="1" max="30" value="3">
 <label class="c"><input id="p" type="checkbox" checked> Avec la photo de la recette</label>
 <button id="b" type="submit">Envoyer au robot</button>
 </form>
@@ -295,7 +304,7 @@ details{margin-top:28px;color:var(--muted)}label.c{display:flex;gap:10px;align-i
 <small>Gardé dans ce navigateur seulement.</small></details>
 </main><script>
 (function(){
-var K='toque-jeton',P='toque-photo',p=document.getElementById('p'),t=document.getElementById('t'),u=document.getElementById('u'),o=document.getElementById('out'),b=document.getElementById('b');
+var K='toque-jeton',P='toque-photo',N='toque-couverts',n=document.getElementById('n'),p=document.getElementById('p'),t=document.getElementById('t'),u=document.getElementById('u'),o=document.getElementById('out'),b=document.getElementById('b');
 function get(){try{return localStorage.getItem(K)||''}catch(e){return ''}}
 function put(v){try{localStorage.setItem(K,v)}catch(e){}}
 var m=/[#&]t=([0-9a-fA-F]{16,})/.exec(location.hash);
@@ -304,12 +313,14 @@ t.value=get();if(!t.value)document.getElementById('d').open=true;
 t.addEventListener('change',function(){put(t.value.trim())});
 try{p.checked=localStorage.getItem(P)!=='non'}catch(e){}
 p.addEventListener('change',function(){try{localStorage.setItem(P,p.checked?'oui':'non')}catch(e){}});
+try{var c=localStorage.getItem(N);if(c)n.value=c}catch(e){}
+n.addEventListener('change',function(){try{localStorage.setItem(N,n.value)}catch(e){}});
 function show(c,s){o.className=c;o.textContent=s}
 document.getElementById('f').addEventListener('submit',function(ev){
  ev.preventDefault();var j=t.value.trim();put(j);
  if(!j){document.getElementById('d').open=true;show('err','Indiquez d\'abord le jeton.');return}
  b.disabled=true;show('','Téléchargement et conversion…');
- fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({url:u.value.trim(),photo:p.checked})})
+ fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({url:u.value.trim(),photo:p.checked,couverts:parseInt(n.value,10)||3})})
  .then(function(r){return r.json()}).then(function(r){
   if(r.ok){var w=(r.warnings||[]);show('ok',r.message+(w.length?'\n\nÀ vérifier :\n• '+w.join('\n• '):''));u.value=''}
   else show('err',r.error||'Erreur');
