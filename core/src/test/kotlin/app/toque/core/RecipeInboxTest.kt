@@ -77,6 +77,15 @@ class RecipeInboxTest {
         assertEquals("https://www.cookomix.com/recettes/a/", received[1].url)
     }
 
+    @Test fun sharedTextGetsAReadableAnswer() {
+        val (code, body) = post("Partagé https://www.cookomix.com/recettes/a/", type = "text/plain")
+        assertEquals(200, code)
+        assertEquals("reçue", body)
+        assertEquals("Erreur : jeton absent ou faux", post("https://www.cookomix.com/recettes/a/", auth = null, type = "text/plain").second)
+        assertEquals("« X » ajoutée.\n\nÀ vérifier :\n• étape 9 : a\n• étape 30 : b",
+            RecipeInbox.asText(mapOf("ok" to true, "message" to "« X » ajoutée.", "warnings" to listOf("étape 9 : a", "étape 30 : b"))))
+    }
+
     @Test fun refusesWithoutTokenOrWithAnotherSite() {
         assertEquals(401, post("""{"url":"https://www.cookomix.com/recettes/a/"}""", auth = null).first)
         assertEquals(401, post("""{"url":"https://www.cookomix.com/recettes/a/"}""", auth = "Bearer faux").first)
