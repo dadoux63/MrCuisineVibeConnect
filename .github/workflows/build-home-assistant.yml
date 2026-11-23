@@ -4,7 +4,7 @@ name: Build APK (home-assistant)
 
 on:
   push:
-    branches: [home-assistant]
+    branches: [home-assistant, cookomix-inbox]
   workflow_dispatch:
 
 permissions:
@@ -23,11 +23,11 @@ jobs:
         run: ./gradlew --no-daemon :core:test :app:assembleRelease
       - name: Checksum
         run: |
-          cp app/build/outputs/apk/release/app-release.apk Toque-ha.apk
-          sha256sum Toque-ha.apk | tee Toque-ha.apk.sha256
+          cp app/build/outputs/apk/release/app-release.apk Toque-${{ github.ref_name }}.apk
+          sha256sum Toque-${{ github.ref_name }}.apk | tee Toque-${{ github.ref_name }}.apk.sha256
       - uses: actions/upload-artifact@v7
         with:
-          name: Toque-ha
+          name: Toque-${{ github.ref_name }}
           path: |
-            Toque-ha.apk
-            Toque-ha.apk.sha256
+            Toque-${{ github.ref_name }}.apk
+            Toque-${{ github.ref_name }}.apk.sha256

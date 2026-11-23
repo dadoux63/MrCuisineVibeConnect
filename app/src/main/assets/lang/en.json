@@ -804,5 +804,13 @@
   "Lecture seule : température, vitesse, poids, couvercle, bol, programme et temps restant. Personne ne peut lancer, arrêter ni régler le robot par le réseau. À n'activer que sur un Wi-Fi de confiance.": "Read only: temperature, speed, weight, lid, bowl, programme and time left. Nobody can start, stop or adjust the robot over the network. Only turn this on with a trusted Wi-Fi.",
   "Nouveau jeton": "New token",
   "Désactivé.": "Off.",
-  "Adresse : %s · port %d\nJeton : %s": "Address: %s · port %d\nToken: %s"
+  "Adresse : %s · port %d\nJeton : %s": "Address: %s · port %d\nToken: %s",
+  "Recevoir des recettes Cookomix du téléphone": "Receive Cookomix recipes from the phone",
+  "Ouvrez l'adresse ci-dessous sur le téléphone (même Wi-Fi), collez l'adresse d'une recette Cookomix : le robot la convertit et l'ajoute ici. Une recette à la fois, pour votre usage personnel. Même jeton que la domotique.": "Open the address below on the phone (same Wi-Fi) and paste the address of a Cookomix recipe: the robot converts it and adds it here. One recipe at a time, for your personal use. Same token as home automation.",
+  "Sur le téléphone : http://%s:%d/#t=%s": "On the phone: http://%s:%d/#t=%s",
+  "Recette reçue : %s": "Recipe received: %s",
+  "Téléchargement impossible depuis le robot : %s": "The robot could not download the page: %s",
+  "« %s » %s dans Mes recettes : %d ingrédients, %d étapes dont %d réglages machine, tous à vérifier sur le robot.": "“%s” %s in My recipes: %d ingredients, %d steps including %d machine settings, all to be checked on the robot.",
+  "ajoutée": "added",
+  "mise à jour": "updated"
 }
