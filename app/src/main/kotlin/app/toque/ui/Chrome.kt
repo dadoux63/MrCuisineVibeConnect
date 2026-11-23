@@ -46,6 +46,7 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
     private val titleView = Ui.ellipsize(Ui.text(a, "", 24f, Ui.TEXT, Ui.MEDIUM))
     private val temp = Ui.chip(a, "", Icon.Kind.THERMO, Ui.TEXT2)
     private val lid = Ui.chip(a, tr("Couvercle ouvert"), Icon.Kind.LID, Ui.WARN, 0x33FFC14D)
+    private val bowl = Ui.chip(a, tr("Bol retiré"), Icon.Kind.POT, Ui.WARN, 0x33FFC14D)
     private val link = Ui.chip(a, "", Icon.Kind.LINK, Ui.TEXT2)
     private val clock = Ui.chip(a, "", Icon.Kind.CLOCK, Ui.TEXT)
     private val home = Icon(a, Icon.Kind.HOME, Ui.TEXT)
@@ -72,12 +73,14 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
         addView(back, LayoutParams(Ui.u(52), Ui.u(52)))
         addView(titleView, LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.u(6) })
         addView(lid, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
+        addView(bowl, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         addView(temp, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         addView(link, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         addView(clock, Ui.lp(Ui.WRAP, Ui.WRAP, r = 8))
         roundButton(home) { a.home() }
         addView(home, LayoutParams(Ui.u(52), Ui.u(52)))
         lid.visibility = View.GONE
+        bowl.visibility = View.GONE
         temp.visibility = View.GONE
         // Accès caché aux réglages Android : 5 appuis rapides sur l'heure.
         clock.setOnClickListener {
@@ -113,6 +116,9 @@ class TopBar(private val a: MainActivity) : LinearLayout(a) {
 
     fun update(s: Snapshot) {
         lid.visibility = if (s.hasSample && s.lidOpen) View.VISIBLE else View.GONE
+        // Seulement si la détection du bol est exigée : la personne a vérifié que le capteur est
+        // fiable (sens réglé), sinon la pastille resterait affichée à tort.
+        bowl.visibility = if (s.hasSample && a.prefs.requireBowl && !s.bowlDetected) View.VISIBLE else View.GONE
         if (s.hasSample) {
             temp.visibility = View.VISIBLE
             Ui.chipText(temp).text = "${s.actualTempC} °C"
