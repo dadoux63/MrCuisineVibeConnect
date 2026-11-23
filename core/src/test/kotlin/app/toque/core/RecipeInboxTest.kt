@@ -60,6 +60,10 @@ class RecipeInboxTest {
         assertEquals(true, Json.parse(body).obj()["ok"])
         assertEquals("https://www.cookomix.com/recettes/bechamel-thermomix/", received.single().url)
         assertNull(received.single().html)
+        assertTrue(received.single().photo)
+        now += RecipeInbox.MIN_INTERVAL_MS
+        post("""{"url":"https://www.cookomix.com/recettes/bechamel-thermomix/","photo":false}""")
+        assertTrue(!received[1].photo)
     }
 
     @Test fun acceptsSharedTextAndAPageWithAccents() {

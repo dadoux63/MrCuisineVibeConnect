@@ -60,6 +60,16 @@ class CookomixTest {
         assertNotNull(Cookomix.URL_RECETTE.find(Cookomix.findUrl("www.x https://cookomix.com/recettes/a-b/")!!))
     }
 
+    @Test fun photoOnlyFromCookomix() {
+        val r = Cookomix.convertitPage(res("essai-cas-difficiles.html"), "", "2026-11-23")
+        assertEquals("https://www.cookomix.com/wp-content/uploads/2020/01/essai-1200x900.jpg", r.photoUrl)
+        assertEquals("https://www.cookomix.com/wp-content/uploads/a.webp",
+            Cookomix.photoUrl(mapOf("image" to mapOf("@type" to "ImageObject", "url" to "https://www.cookomix.com/wp-content/uploads/a.webp"))))
+        assertNull(Cookomix.photoUrl(mapOf("image" to "https://evil.example/wp-content/uploads/a.jpg")))
+        assertNull(Cookomix.photoUrl(mapOf("image" to "https://www.cookomix.com/wp-content/uploads/a.php")))
+        assertNull(Cookomix.photoUrl(emptyMap()))
+    }
+
     @Test fun entities() {
         assertEquals("Crème d'Isigny — 1/2 é", Cookomix.unescape("Cr&egrave;me d&#039;Isigny &mdash; 1/2 &#xe9;"))
         assertEquals("&inconnu;", Cookomix.unescape("&inconnu;"))

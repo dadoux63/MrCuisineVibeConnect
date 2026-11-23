@@ -39,8 +39,11 @@ class RecipeInbox(
     private val bindAddress: InetAddress? = null,
     private val clock: () -> Long = { System.currentTimeMillis() },
 ) {
-    /** [html] : page déjà téléchargée (sinon le robot la télécharge lui-même). */
-    class Request(val url: String, val html: String?)
+    /**
+     * [html] : page déjà téléchargée (sinon le robot la télécharge lui-même).
+     * [photo] : ajouter aussi la photo de la recette (oui par défaut ; `"photo": false` pour s'en passer).
+     */
+    class Request(val url: String, val html: String?, val photo: Boolean = true)
 
     class Reply(val code: Int, val body: Map<String, Any?>) {
         companion object {
@@ -234,14 +237,16 @@ class RecipeInbox(
                 try { Json.parse(trimmed).obj() } catch (_: Exception) { null } else null
             val text: String
             var html: String? = null
+            var photo = true
             if (json != null && json.isNotEmpty()) {
+                photo = json["photo"] != false
                 text = listOfNotNull(json.str("url"), json.str("text")).joinToString(" ")
                 html = json.str("html")?.takeIf { it.isNotBlank() }
             } else {
                 text = trimmed
             }
             val url = Cookomix.findUrl(text) ?: return null
-            return Request(url, html)
+            return Request(url, html, photo)
         }
 
         /** Page servie au téléphone : coller l'adresse, envoyer. Aucune ressource extérieure. */
@@ -258,13 +263,14 @@ main{max-width:34rem;margin:0 auto;padding:24px 16px}h1{font-size:1.4rem;margin:
 label{display:block;font-weight:600;margin:18px 0 6px}input{width:100%;font:inherit;padding:12px;border:1px solid var(--line);border-radius:10px;background:transparent;color:inherit}
 button{margin-top:14px;width:100%;font:inherit;font-weight:600;padding:14px;border:0;border-radius:10px;background:var(--accent);color:#fff}
 button:disabled{opacity:.5}#out{margin-top:18px;white-space:pre-wrap}.ok{color:var(--ok)}.err{color:var(--err)}
-details{margin-top:28px;color:var(--muted)}small{color:var(--muted)}
+details{margin-top:28px;color:var(--muted)}label.c{display:flex;gap:10px;align-items:center;font-weight:400}label.c input{width:auto;transform:scale(1.4)}small{color:var(--muted)}
 </style></head><body><main>
 <h1>Importer une recette Cookomix</h1>
 <p>Collez l'adresse d'une recette : le robot la convertit et l'ajoute à <b>Mes recettes</b>. Une recette à la fois, pour votre usage personnel.</p>
 <form id="f">
 <label for="u">Adresse de la recette</label>
 <input id="u" type="url" inputmode="url" autocomplete="off" placeholder="https://www.cookomix.com/recettes/…/" required>
+<label class="c"><input id="p" type="checkbox" checked> Avec la photo de la recette</label>
 <button id="b" type="submit">Envoyer au robot</button>
 </form>
 <div id="out" role="status"></div>
@@ -274,19 +280,21 @@ details{margin-top:28px;color:var(--muted)}small{color:var(--muted)}
 <small>Gardé dans ce navigateur seulement.</small></details>
 </main><script>
 (function(){
-var K='toque-jeton',t=document.getElementById('t'),u=document.getElementById('u'),o=document.getElementById('out'),b=document.getElementById('b');
+var K='toque-jeton',P='toque-photo',p=document.getElementById('p'),t=document.getElementById('t'),u=document.getElementById('u'),o=document.getElementById('out'),b=document.getElementById('b');
 function get(){try{return localStorage.getItem(K)||''}catch(e){return ''}}
 function put(v){try{localStorage.setItem(K,v)}catch(e){}}
 var m=/[#&]t=([0-9a-fA-F]{16,})/.exec(location.hash);
 if(m){put(m[1]);history.replaceState(null,'',location.pathname);}
 t.value=get();if(!t.value)document.getElementById('d').open=true;
 t.addEventListener('change',function(){put(t.value.trim())});
+try{p.checked=localStorage.getItem(P)!=='non'}catch(e){}
+p.addEventListener('change',function(){try{localStorage.setItem(P,p.checked?'oui':'non')}catch(e){}});
 function show(c,s){o.className=c;o.textContent=s}
 document.getElementById('f').addEventListener('submit',function(ev){
  ev.preventDefault();var j=t.value.trim();put(j);
  if(!j){document.getElementById('d').open=true;show('err','Indiquez d\'abord le jeton.');return}
  b.disabled=true;show('','Téléchargement et conversion…');
- fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({url:u.value.trim()})})
+ fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({url:u.value.trim(),photo:p.checked})})
  .then(function(r){return r.json()}).then(function(r){
   if(r.ok){var w=(r.warnings||[]);show('ok',r.message+(w.length?'\n\nÀ vérifier :\n• '+w.join('\n• '):''));u.value=''}
   else show('err',r.error||'Erreur');
