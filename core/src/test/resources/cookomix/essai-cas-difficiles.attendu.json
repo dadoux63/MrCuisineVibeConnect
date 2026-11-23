@@ -1,0 +1,269 @@
+{
+ "recipe": {
+  "id": "perso-ckx-essai-cas-difficiles",
+  "title": "Essai des cas difficiles",
+  "category": "Plats principaux",
+  "tags": [
+   "Cookomix",
+   "Adaptée du Thermomix"
+  ],
+  "servings": 6,
+  "prepMinutes": 20,
+  "totalMinutes": 155,
+  "difficulty": 1,
+  "source": "user",
+  "image": "",
+  "favorite": false,
+  "notes": "Recette Cookomix de Auteur d&#039;essai : https://www.cookomix.com/recettes/essai-cas-difficiles-thermomix/\nAdaptée automatiquement d'une recette Thermomix le 2026-11-23, pour usage personnel. Chaque réglage machine est à vérifier avant de le lancer.\nAdaptations : étape 4 : vitesse cuillère : vitesse 1 (la plus lente du robot) ; température Varoma : 120 °C | étape 5 : 98 °C absent : 95 °C (palier inférieur) ; vitesse 4 en chauffe : vitesse 3 (limite de Toque) | étape 6 : vitesse 2.5 : vitesse 2 ; 40 °C absent : 37 °C (palier inférieur) | étape 8 : vitesse 6 avec le fouet : vitesse 4 ; montée progressive de la vitesse : à faire à la main | étape 10 : pétrissage ramené de 7 min à 2 min (limite du robot) : finir à la main si besoin ; pas de chauffe en pétrissage sur le Monsieur Cuisine | étape 11 : plus de 99 min, découpée en 2 étapes | étape 13 : au-delà de la vitesse 6, 15 min au plus | étape 14 : Turbo : impulsions à lancer à la main, contenu froid uniquement | étape 17 : température Varoma : 120 °C | étape 20 : vitesse « x » non reconnue : vitesse 1",
+  "author": "Auteur d&#039;essai (Cookomix)",
+  "rating": 0.0,
+  "ratingCount": 0,
+  "language": "",
+  "servingUnit": "",
+  "devices": [],
+  "ingredients": [
+   {
+    "group": "",
+    "items": [
+     {
+      "qty": "1",
+      "unit": "",
+      "name": "Oignon",
+      "note": ""
+     },
+     {
+      "qty": "30",
+      "unit": "g",
+      "name": "Beurre",
+      "note": ""
+     },
+     {
+      "qty": "0,5",
+      "unit": "l",
+      "name": "Lait",
+      "note": ""
+     },
+     {
+      "qty": "1",
+      "unit": "c. à s.",
+      "name": "Farine",
+      "note": ""
+     },
+     {
+      "qty": "",
+      "unit": "",
+      "name": "Sel",
+      "note": ""
+     },
+     {
+      "qty": "20",
+      "unit": "cl",
+      "name": "Crème d'Isigny",
+      "note": ""
+     }
+    ]
+   }
+  ],
+  "steps": [
+   {
+    "text": "Mettre 1 oignon coupé en deux dans le bol."
+   },
+   {
+    "text": "Fermer le couvercle avec le bouchon doseur. Mixer : 5 s / vitesse 5. (Thermomix : 5 s / vitesse 5)",
+    "machine": {
+     "program": "manuel",
+     "seconds": 5,
+     "speed": 5,
+     "tempC": 0,
+     "reverse": false,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Ajouter 30 grammes de beurre dans le bol.",
+    "weigh": {
+     "label": "beurre",
+     "grams": 30
+    }
+   },
+   {
+    "text": "Faire revenir : 3 min / 120 °C / vitesse 1 / sens inverse. (Thermomix : 3 min / Varoma / vitesse cuillère / sens inverse) ⚠ vitesse cuillère : vitesse 1 (la plus lente du robot) ; température Varoma : 120 °C.",
+    "machine": {
+     "program": "manuel",
+     "seconds": 180,
+     "speed": 1,
+     "tempC": 120,
+     "reverse": true,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Cuire : 10 min / 95 °C / vitesse 3 / sens inverse. sans le bouchon doseur. (Thermomix : 10 min / 98 °C / vitesse 4 / sens inverse) ⚠ 98 °C absent : 95 °C (palier inférieur) ; vitesse 4 en chauffe : vitesse 3 (limite de Toque).",
+    "machine": {
+     "program": "manuel",
+     "seconds": 600,
+     "speed": 3,
+     "tempC": 95,
+     "reverse": true,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Chauffer : 2 min / 37 °C / vitesse 2. (Thermomix : 2 min / 40 °C / vitesse 2.5) ⚠ vitesse 2.5 : vitesse 2 ; 40 °C absent : 37 °C (palier inférieur).",
+    "machine": {
+     "program": "manuel",
+     "seconds": 120,
+     "speed": 2,
+     "tempC": 37,
+     "reverse": false,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Mettre le fouet sur la lame."
+   },
+   {
+    "text": "Fouetter : 4 min / vitesse 4. Augmentez progressivement jusqu'à vitesse 6. (Thermomix : 4 min / vitesse 6) ⚠ vitesse 6 avec le fouet : vitesse 4 ; montée progressive de la vitesse : à faire à la main.",
+    "machine": {
+     "program": "manuel",
+     "seconds": 240,
+     "speed": 4,
+     "tempC": 0,
+     "reverse": false,
+     "accessory": "whisk",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Retirer le fouet."
+   },
+   {
+    "text": "Pétrir : Pétrir 2 min. (Thermomix : 7 min / 37 °C / vitesse pétrin) ⚠ pétrissage ramené de 7 min à 2 min (limite du robot) : finir à la main si besoin ; pas de chauffe en pétrissage sur le Monsieur Cuisine.",
+    "machine": {
+     "program": "petrir",
+     "seconds": 120,
+     "speed": 1,
+     "tempC": 0,
+     "reverse": false,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Fermer le couvercle sans le bouchon doseur. Mijoter : 120 min / 100 °C / vitesse 1 / sens inverse. (Thermomix : 120 min / 100 °C / vitesse 1 / sens inverse)",
+    "machine": {
+     "program": "manuel",
+     "seconds": 5940,
+     "speed": 1,
+     "tempC": 100,
+     "reverse": true,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Suite de l'étape précédente : 21 min.",
+    "machine": {
+     "program": "manuel",
+     "seconds": 1260,
+     "speed": 1,
+     "tempC": 100,
+     "reverse": true,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Broyer : 15 min / vitesse 10. (Thermomix : 20 min / vitesse 10) ⚠ au-delà de la vitesse 6, 15 min au plus.",
+    "machine": {
+     "program": "manuel",
+     "seconds": 900,
+     "speed": 10,
+     "tempC": 0,
+     "reverse": false,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Hacher : Turbo × 3. (Thermomix : 3 s / Turbo) ⚠ Turbo : impulsions à lancer à la main, contenu froid uniquement.",
+    "machine": {
+     "program": "turbo",
+     "seconds": 0,
+     "speed": 1,
+     "tempC": 0,
+     "reverse": false,
+     "accessory": "blade",
+     "pulses": 3
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Répartir les légumes dans le cuiseur vapeur (Varoma)."
+   },
+   {
+    "text": "Poser le cuiseur vapeur (équivalent du Varoma) sur le couvercle."
+   },
+   {
+    "text": "Cuire à la vapeur : 25 min / 120 °C / vitesse 1. (Thermomix : 25 min / Varoma / vitesse 1) ⚠ température Varoma : 120 °C.",
+    "machine": {
+     "program": "manuel",
+     "seconds": 1500,
+     "speed": 1,
+     "tempC": 120,
+     "reverse": false,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Retirer le cuiseur vapeur."
+   },
+   {
+    "text": "Servir chaud avec du robot… non, avec le robot ou au robot."
+   },
+   {
+    "text": "Mélanger : 30 s / vitesse 1. (Thermomix : 30 s / vitesse x) ⚠ vitesse « x » non reconnue : vitesse 1.",
+    "machine": {
+     "program": "manuel",
+     "seconds": 30,
+     "speed": 1,
+     "tempC": 0,
+     "reverse": false,
+     "accessory": "blade",
+     "pulses": 0
+    },
+    "needsReview": true
+   },
+   {
+    "text": "Fermer le couvercle avec le bouchon doseur."
+   }
+  ]
+ },
+ "approx": [
+  "étape 4 : vitesse cuillère : vitesse 1 (la plus lente du robot) ; température Varoma : 120 °C",
+  "étape 5 : 98 °C absent : 95 °C (palier inférieur) ; vitesse 4 en chauffe : vitesse 3 (limite de Toque)",
+  "étape 6 : vitesse 2.5 : vitesse 2 ; 40 °C absent : 37 °C (palier inférieur)",
+  "étape 8 : vitesse 6 avec le fouet : vitesse 4 ; montée progressive de la vitesse : à faire à la main",
+  "étape 10 : pétrissage ramené de 7 min à 2 min (limite du robot) : finir à la main si besoin ; pas de chauffe en pétrissage sur le Monsieur Cuisine",
+  "étape 11 : plus de 99 min, découpée en 2 étapes",
+  "étape 13 : au-delà de la vitesse 6, 15 min au plus",
+  "étape 14 : Turbo : impulsions à lancer à la main, contenu froid uniquement",
+  "étape 17 : température Varoma : 120 °C",
+  "étape 20 : vitesse « x » non reconnue : vitesse 1"
+ ]
+}
