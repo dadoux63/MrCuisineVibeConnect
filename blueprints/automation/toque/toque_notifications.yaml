@@ -1,0 +1,265 @@
+blueprint:
+  name: Toque · notifications du Monsieur Cuisine
+  description: >-
+    Prévient sur le téléphone quand le robot attend un geste (pesée, ingrédient à ajouter,
+    réglage à lancer, étape terminée), quand un programme se termine ou va se terminer,
+    et quand il se met en pause ou signale un défaut. Lecture seule : aucune commande
+    n'est envoyée au robot. Les notifications d'attente s'effacent d'elles-mêmes
+    quand l'étape change. Nécessite l'intégration Toque 0.2.0 et Toque
+    0.9.0-ha-ckx-jow-notif.1 ou plus récent pour les étapes de recette.
+  domain: automation
+  source_url: https://github.com/dadoux63/MrCuisineVibeConnect/blob/ha-blueprints/blueprints/automation/toque/toque_notifications.yaml
+  input:
+    phone:
+      name: Téléphone
+      description: Appareil de l'application Home Assistant qui reçoit les notifications.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+    status_entity:
+      name: État du robot
+      default: sensor.cuisine_monsieur_cuisine_connect_etat
+      selector:
+        entity:
+          filter:
+            integration: toque
+            domain: sensor
+    program_entity:
+      name: Programme
+      default: sensor.cuisine_monsieur_cuisine_connect_programme
+      selector:
+        entity:
+          filter:
+            integration: toque
+            domain: sensor
+    end_entity:
+      name: Fin prévue
+      default: sensor.cuisine_monsieur_cuisine_connect_fin_prevue
+      selector:
+        entity:
+          filter:
+            integration: toque
+            domain: sensor
+    alert_entity:
+      name: Alerte
+      default: sensor.cuisine_monsieur_cuisine_connect_alerte
+      selector:
+        entity:
+          filter:
+            integration: toque
+            domain: sensor
+    step_entity:
+      name: Étape de la recette
+      default: sensor.cuisine_monsieur_cuisine_connect_etape_de_la_recette
+      selector:
+        entity:
+          filter:
+            integration: toque
+            domain: sensor
+    waiting_entity:
+      name: Attente de la recette
+      default: sensor.cuisine_monsieur_cuisine_connect_attente_de_la_recette
+      selector:
+        entity:
+          filter:
+            integration: toque
+            domain: sensor
+    wait_delay:
+      name: Délai avant de signaler une attente
+      description: >-
+        Le robot doit attendre depuis ce délai avant la notification. Évite d'être
+        notifié pendant qu'on est devant le robot et qu'on enchaîne les étapes.
+      default:
+        seconds: 45
+      selector:
+        duration: {}
+    prealert_minutes:
+      name: Préavis de fin de programme (minutes)
+      description: >-
+        0 pour désactiver. Rien n'est envoyé pour un programme lancé depuis moins de
+        90 secondes (programme plus court que le préavis).
+      default: 0
+      selector:
+        number:
+          min: 0
+          max: 15
+          unit_of_measurement: min
+    notify_waiting:
+      name: Signaler les attentes de la recette
+      default: true
+      selector:
+        boolean: {}
+    notify_finished:
+      name: Signaler la fin des programmes
+      default: true
+      selector:
+        boolean: {}
+    notify_problems:
+      name: Signaler pauses et défauts
+      default: true
+      selector:
+        boolean: {}
+    channel:
+      name: Canal Android
+      description: >-
+        Nom du canal de notification ; son et vibration se règlent ensuite dans
+        Android › Applis › Home Assistant › Notifications.
+      default: Toque
+      selector:
+        text: {}
+
+mode: queued
+max: 10
+
+triggers:
+  - trigger: state
+    entity_id: !input status_entity
+    to: finished
+    id: finished
+  - trigger: state
+    entity_id: !input status_entity
+    to: [paused, fault]
+    id: problem
+  # Nouvelle étape affichée (le texte n'est relu qu'après le délai, si la recette attend toujours).
+  - trigger: state
+    entity_id: !input step_entity
+    to: ~
+    for: !input wait_delay
+    id: waiting_step
+  # Même étape, mais elle se met à attendre (programme terminé sur la dernière étape…).
+  - trigger: state
+    entity_id: !input waiting_entity
+    to: [weigh, hand, start, next, finish]
+    for: !input wait_delay
+    id: waiting_state
+  # Étape changée ou programme relancé : la notification d'attente n'a plus lieu d'être.
+  - trigger: state
+    entity_id: !input step_entity
+    to: ~
+    id: clear
+  - trigger: state
+    entity_id: !input waiting_entity
+    to: [cooking, unknown, unavailable]
+    id: clear
+  - trigger: template
+    value_template: >-
+      {% set end = states(t_end) | as_datetime(none) %}
+      {{ t_prealert | int(0) > 0 and end is not none and is_state(t_status, 'running')
+         and (end - now()).total_seconds() <= (t_prealert | int(0)) * 60 }}
+    id: prealert
+
+trigger_variables:
+  t_end: !input end_entity
+  t_status: !input status_entity
+  t_prealert: !input prealert_minutes
+
+variables:
+  phone: !input phone
+  status_entity: !input status_entity
+  program_entity: !input program_entity
+  end_entity: !input end_entity
+  alert_entity: !input alert_entity
+  step_entity: !input step_entity
+  waiting_entity: !input waiting_entity
+  prealert: !input prealert_minutes
+  notify_waiting: !input notify_waiting
+  notify_finished: !input notify_finished
+  notify_problems: !input notify_problems
+  channel: !input channel
+  notify_action: "notify.mobile_app_{{ device_attr(phone, 'name') | slugify }}"
+  recipe: "{{ state_attr(step_entity, 'recipe') or '' }}"
+  step: "{{ states(step_entity) }}"
+  step_count: "{{ state_attr(step_entity, 'step_count') or '?' }}"
+  step_text: "{{ state_attr(step_entity, 'text') or '' }}"
+  in_recipe: "{{ recipe != '' and step not in ['unknown', 'unavailable', ''] }}"
+  program: "{{ states(program_entity) if states(program_entity) not in ['unknown', 'unavailable'] else 'Le programme' }}"
+  base_data:
+    channel: "{{ channel }}"
+    importance: high
+    priority: high
+    ttl: 0
+    notification_icon: mdi:chef-hat
+
+actions:
+  - choose:
+      # --- Attente de la recette ------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: [waiting_step, waiting_state]
+          - "{{ notify_waiting }}"
+          - "{{ states(waiting_entity) in ['weigh', 'hand', 'start', 'next', 'finish'] }}"
+          # Étape et attente changées ensemble : une seule notification (celle de l'étape).
+          - >-
+            {{ trigger.id == 'waiting_step' or
+               ((trigger.to_state.last_changed - states[step_entity].last_changed).total_seconds() | abs) > 3 }}
+        sequence:
+          - variables:
+              reason: "{{ states(waiting_entity) }}"
+              ingredients: "{{ state_attr(step_entity, 'ingredients') or [] }}"
+              weigh_g: "{{ state_attr(step_entity, 'weigh_g') or 0 }}"
+              weigh_ingredient: "{{ state_attr(step_entity, 'weigh_ingredient') or '' }}"
+              message: >-
+                {% if reason == 'weigh' %}Pesez {{ weigh_g }} g{{ ' de ' ~ weigh_ingredient if weigh_ingredient }}.
+                {% elif reason == 'start' %}Réglage prêt à lancer : {{ step_text }}
+                {% elif reason == 'next' %}Étape terminée, le robot attend la suite.
+                {% elif reason == 'finish' %}Dernière étape : {{ step_text }}
+                {% else %}{{ step_text }}{% endif %}
+                {%- if reason in ['hand', 'finish'] and ingredients | count > 0 %} · À ajouter : {{ ingredients | join(', ') }}{% endif %}
+          - action: "{{ notify_action }}"
+            data:
+              title: "🍲 {{ recipe }} · étape {{ step }}/{{ step_count }}"
+              message: "{{ message | trim | truncate(400) }}"
+              data: "{{ dict(base_data, tag='toque-recette', group='toque') }}"
+
+      # --- Effacement de la notification d'attente ------------------------------
+      - conditions:
+          - condition: trigger
+            id: clear
+        sequence:
+          - action: "{{ notify_action }}"
+            data:
+              message: clear_notification
+              data:
+                tag: toque-recette
+
+      # --- Fin de programme -----------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: finished
+          - "{{ notify_finished }}"
+        sequence:
+          - action: "{{ notify_action }}"
+            data:
+              title: "✅ {{ program if not in_recipe else recipe }}"
+              message: >-
+                {% if in_recipe %}Étape {{ step }}/{{ step_count }} terminée.
+                {% else %}{{ program }} est terminé.{% endif %}
+              data: "{{ dict(base_data, tag='toque-fin', group='toque') }}"
+
+      # --- Préavis de fin -------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: prealert
+          - "{{ notify_finished }}"
+          - "{{ (now() - states[status_entity].last_changed).total_seconds() > 90 }}"
+        sequence:
+          - action: "{{ notify_action }}"
+            data:
+              title: "⏳ {{ program }}"
+              message: "Fin dans {{ prealert }} min environ."
+              data: "{{ dict(base_data, tag='toque-fin', group='toque') }}"
+
+      # --- Pause et défaut ------------------------------------------------------
+      - conditions:
+          - condition: trigger
+            id: problem
+          - "{{ notify_problems }}"
+        sequence:
+          - action: "{{ notify_action }}"
+            data:
+              title: "{{ '⚠️ Défaut du robot' if trigger.to_state.state == 'fault' else '⏸️ Programme en pause' }}"
+              message: >-
+                {% if trigger.to_state.state == 'fault' %}{{ states(alert_entity) if states(alert_entity) not in ['unknown', 'unavailable'] else 'Le robot signale un défaut.' }}
+                {% else %}{{ program }} est en pause (couvercle ouvert ou bol retiré ?).{% endif %}
+              data: "{{ dict(base_data, tag='toque-alerte', group='toque', channel=channel ~ ' alertes') }}"
