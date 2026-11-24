@@ -11,6 +11,8 @@ import app.toque.core.net.RecipeInbox
 import app.toque.core.net.StatusServer
 import app.toque.core.recipes.Cookomix
 import app.toque.core.recipes.Jow
+import app.toque.core.recipes.Portions
+import app.toque.core.recipes.adjusted
 import app.toque.core.recipes.RecipeCodec
 import app.toque.core.recipes.RecipeSource
 import app.toque.core.recipes.UserRecipes
@@ -66,9 +68,11 @@ object CookomixInbox {
             return RecipeInbox.Reply.error(502, tr("Téléchargement impossible depuis le robot : %s", e.message ?: e.toString()))
         }
         val today = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+        // Nombre de personnes voulu : celui envoyé par le téléphone, sinon celui du foyer (Réglages).
+        val wanted = if (req.couverts > 0) req.couverts else app.prefs.householdServings
         // Les deux convertisseurs rendent la même chose : recette (format de fichier), adaptations, photo.
         val (map, approx, photoUrl) = try {
-            if (req.jow) Jow.convertitPage(html, req.url, req.couverts, today).let { Triple(it.recipe, it.approx, it.photoUrl) }
+            if (req.jow) Jow.convertitPage(html, req.url, wanted, today).let { Triple(it.recipe, it.approx, it.photoUrl) }
             else Cookomix.convertitPage(html, req.url, today).let { Triple(it.recipe, it.approx, it.photoUrl) }
         } catch (e: Cookomix.Refus) {
             return RecipeInbox.Reply.error(422, e.message ?: "conversion refusée")
@@ -98,6 +102,22 @@ object CookomixInbox {
             }
         }
         app.recipes.upsertAll(listOf(recipe), rebuild = false)
+        // La recette reste telle que la source l'a écrite ; l'adaptation au foyer passe par le même réglage
+        // que le bouton − / + de la recette (quantités et pesées recalculées, temps inchangés).
+        val people = Portions.importServings(recipe.servings, wanted)
+        val previous = app.recipes.adjustmentsOf(recipe.id)
+        app.recipes.setAdjustments(recipe.id, previous.withServings(if (people > 0) people else recipe.servings, recipe.servings))
+        if (recipe.servings > 0 && people > 0 && people != wanted)
+            warnings += tr("recette pour %d : Toque l'adapte de %d à %d personnes, quantités calculées pour %d", recipe.servings,
+                Portions.range(recipe.servings).first, Portions.range(recipe.servings).last, people)
+        if (recipe.servings <= 0) warnings += tr("nombre de personnes absent de la recette : quantités de la source")
+        val shown = recipe.adjusted(app.recipes.adjustmentsOf(recipe.id))
+        val load = Portions.bowlLoad(shown)
+        if (load.overCapacity) warnings += tr("environ %s kg dans le bol : plus que sa contenance (3 l), à cuisiner en deux fois",
+            String.format(Locale.FRANCE, "%.1f", load.grams / 1000.0))
+        else if (load.overFastLimit) warnings += tr("environ %s kg dans le bol : pas de vitesse 10 ni de Turbo au-delà de 2,5 l de liquide",
+            String.format(Locale.FRANCE, "%.1f", load.grams / 1000.0))
+        if (load.overKnead) warnings += tr("%d g de farine à pétrir : 500 g au plus pour une pâte lourde, 600 g pour une pâte légère", load.flourKneaded)
         // L'index de recherche est reconstruit à part : la réponse part tout de suite.
         Thread({
             try { app.recipes.refresh() } catch (e: Exception) { app.log.write("cookomix", "réindexation : $e") }
@@ -110,6 +130,8 @@ object CookomixInbox {
             "$machine réglages, ${approx.size} adaptations, photo : ${if (photo) "oui" else "non"})")
         val message = tr("« %s » %s dans Mes recettes : %d ingrédients, %d étapes dont %d réglages machine, tous à vérifier sur le robot.",
             recipe.title, if (before == null) tr("ajoutée") else tr("mise à jour"), recipe.allIngredients.size, recipe.steps.size, machine) +
+            (if (shown.servings > 0 && shown.servings != recipe.servings) " " + tr("Quantités pour %d personnes (recette : %d).", shown.servings, recipe.servings)
+            else if (recipe.servings > 0) " " + tr("Pour %d personnes.", recipe.servings) else "") +
             if (photo) " " + tr("Photo ajoutée.") else ""
         return RecipeInbox.Reply.ok(linkedMapOf(
             "message" to message,
@@ -119,6 +141,7 @@ object CookomixInbox {
             "steps" to recipe.steps.size,
             "machine_steps" to machine,
             "photo" to photo,
+            "servings" to shown.servings,
             "warnings" to warnings,
         ))
     }

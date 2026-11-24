@@ -358,6 +358,16 @@ class Prefs(context: Context) {
             p.edit().putBoolean("cookomixInbox", v).commit()
         }
 
+    /**
+     * Personnes à table chez soi : une recette reçue du téléphone (Cookomix, Jow) s'ouvre recalculée
+     * pour ce nombre, comme si on l'avait réglé à la main (« Revenir à … » la remet comme à la source).
+     */
+    var householdServings: Int
+        get() = p.getInt("householdServings", app.toque.core.recipes.Jow.COUVERTS_DEFAUT).coerceIn(1, 12)
+        set(v) {
+            p.edit().putInt("householdServings", v.coerceIn(1, 12)).commit()
+        }
+
     /** Prévenir quand une nouvelle version de Toque est publiée (au démarrage et au réveil). */
     var updateAlerts: Boolean
         get() = p.getBoolean("updateAlerts", true)
