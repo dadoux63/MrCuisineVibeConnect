@@ -4,7 +4,7 @@ name: Build APK (home-assistant)
 
 on:
   push:
-    branches: [home-assistant, cookomix-inbox, toque-combo]
+    branches: [home-assistant, cookomix-inbox, toque-combo, toque-combo-082]
   workflow_dispatch:
 
 permissions:
