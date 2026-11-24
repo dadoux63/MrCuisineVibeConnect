@@ -27,7 +27,8 @@ import java.security.MessageDigest
  *   déjà téléchargée par un autre appareil) ; ou bien texte brut contenant l'adresse.
  * - Seules les adresses `https://www.cookomix.com/recettes/…/` et `https://jow.fr/recipes/…` sont
  *   acceptées (un lien `app.jow.com/…?recipeId=…` est ramené à la seconde) : le robot ne peut pas
- *   servir de relais vers un autre site. `"couverts"` (JSON) : nombre de personnes pour Jow.
+ *   servir de relais vers un autre site. `"couverts"` (JSON) : nombre de personnes voulu (Cookomix et
+ *   Jow) ; absent, celui du foyer réglé sur le robot.
  * - Une requête à la fois, une recette par requête, [MIN_INTERVAL_MS] entre deux imports : outil
  *   d'import à la demande, pas un aspirateur.
  * - Aucune commande machine : ce serveur ne connaît ni le moteur ni la chauffe. Il tourne dans le
@@ -44,8 +45,9 @@ class RecipeInbox(
     /**
      * [html] : page déjà téléchargée (sinon le robot la télécharge lui-même).
      * [photo] : ajouter aussi la photo de la recette (oui par défaut ; `"photo": false` pour s'en passer).
+     * [couverts] : nombre de personnes voulu ; 0 (non précisé, partage depuis le téléphone) : celui du foyer.
      */
-    class Request(val url: String, val html: String?, val photo: Boolean = true, val couverts: Int = Jow.COUVERTS_DEFAUT) {
+    class Request(val url: String, val html: String?, val photo: Boolean = true, val couverts: Int = 0) {
         val jow: Boolean get() = Jow.URL_RECETTE.matches(url)
     }
 
@@ -257,7 +259,7 @@ class RecipeInbox(
             val text: String
             var html: String? = null
             var photo = true
-            var couverts = Jow.COUVERTS_DEFAUT
+            var couverts = 0
             if (json != null && json.isNotEmpty()) {
                 photo = json["photo"] != false
                 (json["couverts"] as? Number)?.toInt()?.takeIf { it in 1..30 }?.let { couverts = it }
@@ -292,8 +294,8 @@ details{margin-top:28px;color:var(--muted)}label.c{display:flex;gap:10px;align-i
 <form id="f">
 <label for="u">Adresse de la recette</label>
 <input id="u" type="text" inputmode="url" autocomplete="off" placeholder="https://www.cookomix.com/recettes/… ou https://app.jow.com/…" required>
-<label for="n">Personnes (Jow)</label>
-<input id="n" type="number" inputmode="numeric" min="1" max="30" value="3">
+<label for="n">Personnes (vide : celui du robot)</label>
+<input id="n" type="number" inputmode="numeric" min="1" max="30" placeholder="réglage du robot">
 <label class="c"><input id="p" type="checkbox" checked> Avec la photo de la recette</label>
 <button id="b" type="submit">Envoyer au robot</button>
 </form>
@@ -313,14 +315,14 @@ t.value=get();if(!t.value)document.getElementById('d').open=true;
 t.addEventListener('change',function(){put(t.value.trim())});
 try{p.checked=localStorage.getItem(P)!=='non'}catch(e){}
 p.addEventListener('change',function(){try{localStorage.setItem(P,p.checked?'oui':'non')}catch(e){}});
-try{var c=localStorage.getItem(N);if(c)n.value=c}catch(e){}
+try{var c=localStorage.getItem(N);if(c&&c!=='3')n.value=c}catch(e){}
 n.addEventListener('change',function(){try{localStorage.setItem(N,n.value)}catch(e){}});
 function show(c,s){o.className=c;o.textContent=s}
 document.getElementById('f').addEventListener('submit',function(ev){
  ev.preventDefault();var j=t.value.trim();put(j);
  if(!j){document.getElementById('d').open=true;show('err','Indiquez d\'abord le jeton.');return}
  b.disabled=true;show('','Téléchargement et conversion…');
- fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({url:u.value.trim(),photo:p.checked,couverts:parseInt(n.value,10)||3})})
+ fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({url:u.value.trim(),photo:p.checked,couverts:parseInt(n.value,10)||0})})
  .then(function(r){return r.json()}).then(function(r){
   if(r.ok){var w=(r.warnings||[]);show('ok',r.message+(w.length?'\n\nÀ vérifier :\n• '+w.join('\n• '):''));u.value=''}
   else show('err',r.error||'Erreur');

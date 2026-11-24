@@ -540,7 +540,7 @@ object Jow {
         var n = couverts.coerceIn(1, 30)
         if (options.isNotEmpty() && n !in options) {
             val choisi = options.firstOrNull { it >= n } ?: options.last()
-            approx += "Jow propose cette recette pour ${options.take(4).joinToString(", ")}… personnes : quantités pour $choisi au lieu de $n"
+            approx += "Jow propose cette recette pour ${options.take(4).joinToString(", ")}… personnes : convertie pour $choisi, puis quantités recalculées pour $n dans Toque (temps de cuisson de la version pour $choisi)"
             n = choisi
         }
 

@@ -7,6 +7,7 @@ import app.toque.core.recipes.Recipe
 import app.toque.core.recipes.RecipeAdjustments
 import app.toque.core.recipes.Step
 import app.toque.core.recipes.StepMachine
+import app.toque.core.recipes.StepProgram
 import app.toque.core.recipes.Weigh
 import app.toque.core.recipes.adjusted
 import app.toque.core.recipes.forServings
@@ -131,5 +132,38 @@ class PortionsTest {
             r.forServings(8).allIngredients.map { it.display })
         assertEquals(listOf("½ oignon", "1 gousse d'ail", "250 g carottes", "½ pincée sel"),
             r.forServings(2).allIngredients.map { it.display })
+    }
+
+    @Test fun importedRecipesFollowTheHousehold() {
+        assertEquals(3, Portions.importServings(4, 3))
+        assertEquals(3, Portions.importServings(6, 3))
+        assertEquals(0, Portions.importServings(3, 3)) // déjà pour 3 : rien à changer
+        assertEquals(4, Portions.importServings(8, 3)) // pas moins de la moitié de la recette
+        assertEquals(4, Portions.importServings(2, 6)) // pas plus du double
+        assertEquals(0, Portions.importServings(0, 3)) // nombre inconnu : quantités de la source
+        // Réglage appliqué comme le − / + : quantités et pesées pour 3, machine inchangée.
+        val r = recipe.adjusted(RecipeAdjustments().withServings(Portions.importServings(4, 3), 4))
+        assertEquals(3, r.servings)
+        assertEquals("380", r.allIngredients[0].qty) // 375 g, arrondi aux 10 g au-delà de 250 g
+        assertEquals(cook, r.steps[2].machine)
+    }
+
+    @Test fun bowlLimitsComeFromTheManual() {
+        val soup = Recipe(id = "s", title = "Soupe", servings = 4, ingredients = listOf(IngredientGroup("", listOf(
+            Ingredient("1,5", "l", "eau"), Ingredient("800", "g", "légumes")))))
+        assertEquals(2300, Portions.bowlLoad(soup).grams)
+        assertTrue(!Portions.bowlLoad(soup).overFastLimit)
+        val six = soup.adjusted(RecipeAdjustments().withServings(6, 4))
+        assertTrue(Portions.bowlLoad(six).overCapacity) // 3,45 kg > 3 l
+        val five = soup.adjusted(RecipeAdjustments().withServings(5, 4))
+        assertTrue(Portions.bowlLoad(five).overFastLimit)
+        assertTrue(!Portions.bowlLoad(five).overCapacity) // 2,9 kg : sous le repère III
+        val bread = Recipe(id = "b", title = "Pain", servings = 6,
+            ingredients = listOf(IngredientGroup("", listOf(Ingredient("400", "g", "farine de blé T65"), Ingredient("250", "ml", "eau")))),
+            steps = listOf(Step("Pétrir.", machine = StepMachine(program = StepProgram.KNEAD, seconds = 180))))
+        assertEquals(400, Portions.bowlLoad(bread).flourKneaded)
+        assertTrue(Portions.bowlLoad(bread.adjusted(RecipeAdjustments().withServings(9, 6))).overKnead) // 600 g
+        // Sans pétrissage, la farine ne compte pas comme pâte.
+        assertEquals(0, Portions.bowlLoad(bread.copy(steps = emptyList())).flourKneaded)
     }
 }

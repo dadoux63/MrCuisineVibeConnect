@@ -395,6 +395,13 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
         inboxText = hint("").apply { setTextIsSelectable(true) }
         p.addView(inboxText, Ui.lp(t = 8, b = 8))
         renderInbox()
+        // Recette reçue : recalculée pour le foyer (le même réglage que le − / + de la recette).
+        val people = (1..12).map { it.toString() to tr("%d pers.", it) }
+        p.addView(choice(tr("Personnes à table"), dropdown(people, a.prefs.householdServings.toString()) { n ->
+            a.prefs.householdServings = n.toInt()
+        }, width = 200), Ui.lp(t = 8))
+        p.addView(hint(tr("Les recettes reçues du téléphone s'ouvrent avec les quantités et les pesées recalculées pour ce nombre de personnes (de la moitié au double de la recette). Les temps et les températures restent ceux de la recette.")),
+            Ui.lp(t = 4, b = 8))
     }
 
     /** L'appli d'origine du robot : y reprendre ses recettes (là où Toque sait lire sa base), ou l'ouvrir. */

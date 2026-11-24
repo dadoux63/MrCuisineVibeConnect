@@ -71,7 +71,7 @@ class JowTest {
         assertEquals("https://jow.fr/recipes/61a4ef596a167b0f040af8ad", r.url)
         assertEquals(2, r.couverts)
         val t = RecipeInbox.parse("Soupe https://app.jow.com/EC0U?action=recipe&recipeId=61cc2424c5541a0ede3f47b7&source=jow", "text/plain")!!
-        assertEquals(Jow.COUVERTS_DEFAUT, t.couverts)
+        assertEquals(0, t.couverts) // partage sans nombre : celui du foyer, réglé sur le robot
         assertFalse(RecipeInbox.parse("https://www.cookomix.com/recettes/bechamel-thermomix/", "text/plain")!!.jow)
         assertNull(RecipeInbox.parse("https://jow.fr.evil.example/recipes/x", "text/plain"))
     }
