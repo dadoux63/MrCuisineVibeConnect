@@ -23,6 +23,7 @@ import java.security.SecureRandom
  *   aussitôt : un client lent ou malveillant ne peut ni bloquer la machine ni épuiser la mémoire.
  *   Le serveur tourne dans son propre fil ; il ne touche jamais la boucle de pilotage.
  * - Les trames brutes (rxHex/txHex) et l'état du fil série ne sont pas publiés.
+ * - `recipe` (ajout compatible de l'API 1) : étape de la recette guidée affichée, pour les notifications.
  */
 class StatusServer(
     private val port: Int,
@@ -31,6 +32,8 @@ class StatusServer(
     private val info: () -> Map<String, Any?> = { emptyMap() },
     private val log: (String) -> Unit = {},
     private val bindAddress: InetAddress? = null,
+    /** Recette guidée affichée (déjà passée par la liste blanche de [RecipeProgress.publicMap]), null sinon. */
+    private val recipe: () -> Map<String, Any?>? = { null },
 ) {
     private val expected = token.toByteArray(StandardCharsets.UTF_8)
     @Volatile private var server: ServerSocket? = null
@@ -113,6 +116,7 @@ class StatusServer(
         "api" to API_VERSION,
         "device" to info(),
         "state" to s?.let { publicState(it) },
+        "recipe" to try { recipe() } catch (_: Exception) { null },
     )
 
     private fun error(message: String) = Json.write(mapOf("error" to message))

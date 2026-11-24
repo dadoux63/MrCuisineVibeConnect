@@ -391,6 +391,9 @@ class MainActivity : Activity() {
     val current: Screen? get() = stack.lastOrNull()
     val depth: Int get() = stack.size
 
+    /** [s] est encore dans la pile (affiché ou recouvert par un autre écran). */
+    fun isOpen(s: Screen): Boolean = stack.any { it === s }
+
     fun push(s: Screen) {
         hideKeyboard()
         stack.lastOrNull()?.onHide()

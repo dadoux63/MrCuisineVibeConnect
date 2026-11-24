@@ -15,6 +15,7 @@ import android.os.Message
 import android.os.Messenger
 import android.os.Process
 import android.os.RemoteException
+import android.os.SystemClock
 import app.toque.Logbook
 import app.toque.Prefs
 import app.toque.core.i18n.I18n
@@ -34,6 +35,7 @@ import app.toque.core.machine.Snapshot
 import app.toque.core.machine.TcpTransport
 import app.toque.core.machine.Transport
 import app.toque.core.machine.Verdict
+import app.toque.core.net.RecipeProgress
 import app.toque.core.net.StatusServer
 import app.toque.core.protocol.Direction
 import app.toque.ui.MainActivity
@@ -52,6 +54,8 @@ class MachineService : Service() {
     private var lastNotified = ""
     /** Dernier état reçu de la boucle, lu par le serveur d'état (lecture seule, autre fil). */
     @Volatile private var latest: Snapshot? = null
+    /** Recette guidée affichée par l'interface (informatif, lu par le serveur d'état). */
+    @Volatile private var recipe: RecipeProgress? = null
     private var status: StatusServer? = null
     private var statusKey = ""
     private lateinit var prefs: Prefs
@@ -195,6 +199,7 @@ class MachineService : Service() {
                 )
             },
             log = { line -> log.write("domotique", line) },
+            recipe = { recipe?.publicMap(SystemClock.elapsedRealtime()) },
         )
         try {
             server.start()
@@ -274,6 +279,11 @@ class MachineService : Service() {
             // Pas de boucle (robot pas encore confirmé en « Machine réelle ») : rien ne tourne, on la crée.
             createLoop()
             reply(to, id, Verdict.OK)
+            return
+        }
+        if (msg.what == Ipc.RECIPE) {
+            // Informatif : gardé pour le serveur d'état, jamais transmis à la boucle de pilotage.
+            recipe = Ipc.bundleToRecipe(msg.data)
             return
         }
         if (loop == null && msg.what == Ipc.REGISTER) {
