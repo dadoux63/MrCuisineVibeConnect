@@ -827,5 +827,12 @@
   "Quantités pour %d personnes (recette : %d).": "Quantities for %d people (recipe: %d).",
   "Pour %d personnes.": "Serves %d.",
   "Environ %s kg d'ingrédients : plus que la contenance du bol (3 L, repère III). Cuisinez en deux fois.": "About %s kg of ingredients: more than the bowl holds (3 L, mark III). Cook in two batches.",
-  "%d g de farine à pétrir : le robot en pétrit 500 g au plus pour une pâte lourde, 600 g pour une pâte légère.": "%d g of flour to knead: the robot kneads 500 g at most for a heavy dough, 600 g for a light one."
+  "%d g de farine à pétrir : le robot en pétrit 500 g au plus pour une pâte lourde, 600 g pour une pâte légère.": "%d g of flour to knead: the robot kneads 500 g at most for a heavy dough, 600 g for a light one.",
+  "Cette semaine": "This week",
+  "Semaine": "Week",
+  "Vider la semaine": "Clear the week",
+  "Semaine vidée": "Week cleared",
+  "Retirer toutes les recettes de « Cette semaine » ? Elles restent dans Mes recettes.": "Remove every recipe from “This week”? They stay in My recipes.",
+  "Aucune recette prévue cette semaine.\nPartagez une recette Jow vers Toque depuis le téléphone, ou collez plusieurs liens sur la page d'import du robot.": "No recipe planned this week.\nShare a Jow recipe to Toque from your phone, or paste several links on the robot's import page.",
+  "Ajoutée à « Cette semaine ».": "Added to “This week”."
 }

@@ -9,7 +9,7 @@ import app.toque.core.i18n.tr
  */
 data class RecipeChip(val kind: Kind, val category: String = "") {
     enum class Kind(val key: String) {
-        ALL("all"), RECENT("recent"), FREQUENT("frequent"), FAVORITES("favorites"), USER("user"), COMMUNITY("community"), QUICK("quick"), CATEGORY("category");
+        ALL("all"), WEEK("week"), RECENT("recent"), FREQUENT("frequent"), FAVORITES("favorites"), USER("user"), COMMUNITY("community"), QUICK("quick"), CATEGORY("category");
 
         companion object {
             fun of(key: String): Kind? = values().firstOrNull { it.key == key }
@@ -22,6 +22,7 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
     /** Texte de la pastille : traduit pour les filtres fixes, tel quel pour une catégorie (donnée du catalogue). */
     val label: String get() = when (kind) {
         Kind.ALL -> tr("Toutes")
+        Kind.WEEK -> tr("Cette semaine")
         Kind.RECENT -> tr("Récentes")
         Kind.FREQUENT -> tr("Fréquentes")
         Kind.FAVORITES -> tr("Favoris")
@@ -31,8 +32,11 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
         Kind.CATEGORY -> category
     }
 
-    /** Récentes et Fréquentes : l'ordre vient des cuissons, la recherche ne fait que filtrer. */
-    val byUsage: Boolean get() = kind == Kind.RECENT || kind == Kind.FREQUENT
+    /**
+     * Récentes et Fréquentes : l'ordre vient des cuissons ; Cette semaine : l'ordre d'arrivée des
+     * recettes prévues. La recherche ne fait que filtrer.
+     */
+    val byUsage: Boolean get() = kind == Kind.RECENT || kind == Kind.FREQUENT || kind == Kind.WEEK
 
     /** Filtre de recherche équivalent. */
     val filter: RecipeFilter get() = when (kind) {
@@ -46,6 +50,7 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
 
     companion object {
         val ALL = RecipeChip(Kind.ALL)
+        val WEEK = RecipeChip(Kind.WEEK)
         val RECENT = RecipeChip(Kind.RECENT)
         val FREQUENT = RecipeChip(Kind.FREQUENT)
         val FAVORITES = RecipeChip(Kind.FAVORITES)
@@ -60,13 +65,15 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
         const val MAX_CATEGORIES = 30
 
         /**
-         * Les pastilles, dans l'ordre de l'écran : les fixes, « Mes recettes » (s'il y a une recette
+         * Les pastilles, dans l'ordre de l'écran : « Toutes », « Cette semaine » (si [week] : des recettes
+         * sont prévues, ou si c'est la pastille choisie), les autres fixes, « Mes recettes » (s'il y a une recette
          * perso, ou si c'est la pastille choisie), « Communauté » (de même, pour les recettes venues de
          * toqueapp.org), « 30 min max », puis les 30 premières catégories.
          */
-        fun list(index: SearchIndex, selected: RecipeChip? = null): List<RecipeChip> {
-            val out = ArrayList<RecipeChip>(FIXED.size + 3 + MAX_CATEGORIES)
+        fun list(index: SearchIndex, selected: RecipeChip? = null, week: Boolean = false): List<RecipeChip> {
+            val out = ArrayList<RecipeChip>(FIXED.size + 4 + MAX_CATEGORIES)
             out += FIXED
+            if (week || selected?.kind == Kind.WEEK) out.add(1, WEEK)
             if (selected?.kind == Kind.USER || index.entries.any { it.source == RecipeSource.USER }) out += USER
             if (selected?.kind == Kind.COMMUNITY || index.entries.any { it.source == RecipeSource.COMMUNITY }) out += COMMUNITY
             out += QUICK
@@ -76,8 +83,8 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
 
         /**
          * Ce que montre la pastille [chip] avec le texte [query] : recherche tolérante (ou par
-         * ingrédients séparés par des virgules) dans le filtre de la pastille ; pour Récentes et
-         * Fréquentes, l'ordre des cuissons, que le texte ne fait que filtrer.
+         * ingrédients séparés par des virgules) dans le filtre de la pastille ; pour Récentes,
+         * Fréquentes et Cette semaine, l'ordre de leur liste, que le texte ne fait que filtrer.
          */
         fun select(
             index: SearchIndex,
@@ -85,11 +92,16 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
             query: String,
             recentIds: () -> List<String> = { emptyList() },
             frequentIds: () -> List<String> = { emptyList() },
+            weekIds: () -> List<String> = { emptyList() },
         ): List<SearchIndex.Hit> {
             val f = chip.filter
             val found = if (query.contains(',')) index.withIngredients(query.split(','), f) else index.search(query, f)
             if (!chip.byUsage) return found
-            val ids = if (chip.kind == Kind.RECENT) recentIds() else frequentIds()
+            val ids = when (chip.kind) {
+                Kind.RECENT -> recentIds()
+                Kind.WEEK -> weekIds()
+                else -> frequentIds()
+            }
             val byId = HashMap<String, SearchIndex.Entry>()
             for (e in index.entries) byId[e.id] = e
             val keep = if (query.isBlank()) null else found.mapTo(HashSet()) { it.entry.id }

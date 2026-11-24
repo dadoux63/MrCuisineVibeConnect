@@ -122,4 +122,49 @@ class RecipeInboxTest {
         now += RecipeInbox.MIN_INTERVAL_MS
         assertEquals(500, post("""{"url":"https://www.cookomix.com/recettes/a/"}""").first)
     }
+
+    @Test fun severalAddressesAreImportedOneByOne() {
+        inbox.stop()
+        val pauses = ArrayList<Long>()
+        inbox = RecipeInbox(0, { token }, { r ->
+            received += r
+            if (r.url.endsWith("/b/")) RecipeInbox.Reply.error(502, "injoignable")
+            else RecipeInbox.Reply.ok(mapOf("message" to "reçue", "title" to "Titre " + r.url.takeLast(3), "warnings" to listOf("w")))
+        }, bindAddress = InetAddress.getLoopbackAddress(), clock = { now }, pause = { pauses += it })
+        inbox.start()
+        val text = "https://www.cookomix.com/recettes/a/\nhttps://app.jow.com/x?action=recipe&recipeId=5be0510ef8d9630004f48b9f\n" +
+            "https://www.cookomix.com/recettes/a/ https://www.cookomix.com/recettes/b/"
+        val (code, body) = post(Json.write(mapOf("text" to text, "semaine" to true)))
+        assertEquals(200, code)
+        assertEquals(listOf("https://www.cookomix.com/recettes/a/", "https://jow.fr/recipes/5be0510ef8d9630004f48b9f",
+            "https://www.cookomix.com/recettes/b/"), received.map { it.url })
+        assertTrue(received.all { it.week })
+        // Une pause entre deux téléchargements, pas avant le premier.
+        assertEquals(listOf(RecipeInbox.MIN_INTERVAL_MS, RecipeInbox.MIN_INTERVAL_MS), pauses)
+        val reply = Json.parse(body).obj()
+        assertEquals(2L, (reply["imported"] as Number).toLong())
+        assertTrue(reply["message"].toString().startsWith("2 recettes sur 3"))
+        assertTrue(reply["message"].toString().contains("✗ https://www.cookomix.com/recettes/b/ : injoignable"))
+    }
+
+    @Test fun tooManyAddressesAreRefused() {
+        val text = (1..RecipeInbox.MAX_BATCH + 1).joinToString("\n") { "https://www.cookomix.com/recettes/r$it/" }
+        assertEquals(413, post(Json.write(mapOf("text" to text))).first)
+        assertTrue(received.isEmpty())
+        now += RecipeInbox.MIN_INTERVAL_MS
+        val ten = (1..RecipeInbox.MAX_BATCH).joinToString("\n") { "https://www.cookomix.com/recettes/r$it/" }
+        assertEquals(RecipeInbox.MAX_BATCH, RecipeInbox.parseAll(ten, "text/plain").size)
+    }
+
+    @Test fun thisWeekByDefaultForJowOnly() {
+        val jow = RecipeInbox.parse("https://jow.fr/recipes/abc", "text/plain")!!
+        val ckx = RecipeInbox.parse("https://www.cookomix.com/recettes/a/", "text/plain")!!
+        assertTrue(jow.week)
+        assertTrue(!ckx.week)
+        assertTrue(!RecipeInbox.parse("""{"url":"https://jow.fr/recipes/abc","semaine":false}""", "application/json")!!.week)
+        assertTrue(RecipeInbox.parse("""{"url":"https://www.cookomix.com/recettes/a/","semaine":true}""", "application/json")!!.week)
+        // Une page déjà téléchargée ne vaut que pour la première adresse.
+        val withPage = RecipeInbox.parseAll(Json.write(mapOf("text" to "https://jow.fr/recipes/a https://jow.fr/recipes/b", "html" to "<p>")), "application/json")
+        assertEquals(listOf("https://jow.fr/recipes/a"), withPage.map { it.url })
+    }
 }

@@ -28,7 +28,8 @@ import java.util.Locale
  * robot, convertie (voir [Cookomix] et [Jow]) puis ajoutée à Mes recettes. Processus de l'interface uniquement : le
  * pilotage (« :machine ») n'est jamais concerné.
  *
- * Usage strictement personnel (CGU de Cookomix et de Jow) : une recette à la fois, rien n'est publié.
+ * Usage strictement personnel (CGU de Cookomix et de Jow) : recettes choisies par l'utilisateur, une
+ * par une (10 au plus par envoi), rien n'est publié.
  */
 object CookomixInbox {
     private var server: RecipeInbox? = null
@@ -118,6 +119,8 @@ object CookomixInbox {
         else if (load.overFastLimit) warnings += tr("environ %s kg dans le bol : pas de vitesse 10 ni de Turbo au-delà de 2,5 l de liquide",
             String.format(Locale.FRANCE, "%.1f", load.grams / 1000.0))
         if (load.overKnead) warnings += tr("%d g de farine à pétrir : 500 g au plus pour une pâte lourde, 600 g pour une pâte légère", load.flourKneaded)
+        // « Cette semaine » : recettes prévues (Jow par défaut), retirées de la liste une fois cuisinées.
+        if (req.week) app.recipes.addToWeek(recipe.id)
         // L'index de recherche est reconstruit à part : la réponse part tout de suite.
         Thread({
             try { app.recipes.refresh() } catch (e: Exception) { app.log.write("cookomix", "réindexation : $e") }
@@ -132,7 +135,8 @@ object CookomixInbox {
             recipe.title, if (before == null) tr("ajoutée") else tr("mise à jour"), recipe.allIngredients.size, recipe.steps.size, machine) +
             (if (shown.servings > 0 && shown.servings != recipe.servings) " " + tr("Quantités pour %d personnes (recette : %d).", shown.servings, recipe.servings)
             else if (recipe.servings > 0) " " + tr("Pour %d personnes.", recipe.servings) else "") +
-            if (photo) " " + tr("Photo ajoutée.") else ""
+            (if (photo) " " + tr("Photo ajoutée.") else "") +
+            (if (req.week) " " + tr("Ajoutée à « Cette semaine ».") else "")
         return RecipeInbox.Reply.ok(linkedMapOf(
             "message" to message,
             "id" to recipe.id,
@@ -142,6 +146,7 @@ object CookomixInbox {
             "machine_steps" to machine,
             "photo" to photo,
             "servings" to shown.servings,
+            "week" to req.week,
             "warnings" to warnings,
         ))
     }
