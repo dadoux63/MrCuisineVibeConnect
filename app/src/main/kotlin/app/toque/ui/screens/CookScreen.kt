@@ -15,6 +15,7 @@ import app.toque.core.machine.JobState
 import app.toque.core.machine.MachineEvent
 import app.toque.core.machine.SafetyPolicy
 import app.toque.core.machine.Snapshot
+import app.toque.core.net.RecipeProgress
 import app.toque.core.protocol.Mcc
 import app.toque.core.recipes.PermittedSetting
 import app.toque.core.recipes.Portions
@@ -93,6 +94,11 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
     private var hotBlendOk = false
     /** Message fixe de l'étape (vérification, refus), réaffiché hors cuisson. */
     private var panelInfo = ""
+    /** Arrivée sur l'étape affichée (horloge monotone du système), pour la domotique. */
+    private var stepSince = SystemClock.elapsedRealtime()
+    /** Ingrédients nommés par l'étape [ingredientsOf], calculés une fois par étape. */
+    private var ingredientsOf = -1
+    private var stepIngredients: List<String> = emptyList()
 
     private lateinit var segments: LinearLayout
     private lateinit var counter: TextView
@@ -182,6 +188,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         if (index >= recipe.steps.size - 1) {
             countCooked()
             a.prefs.guidedRecipe = ""
+            a.machine.reportRecipe(null)
             a.chime(1)
             // « Bon appétit ! » et la suite : nettoyage, note, Terminer.
             val seconds = if (fromStart) ((SystemClock.elapsedRealtime() - openedAt) / 1000).toInt() else 0
@@ -206,6 +213,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
     private fun stopRecipe() {
         if (stopped) return
         stopped = true
+        a.machine.reportRecipe(null)
         if (launchedActive(a.snapshot)) a.machine.stop()
         launchedStep = -1
         launchedCount = 1
@@ -220,6 +228,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
 
     private fun go(i: Int) {
         if (i < 0 || i >= recipe.steps.size) return
+        if (i != index) stepSince = SystemClock.elapsedRealtime()
         index = i
         weighArmed = false
         a.prefs.guidedRecipe = recipe.id
@@ -571,6 +580,8 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
     override fun onHide() {
         unsubTimers?.invoke()
         unsubTimers = null
+        // Écran fermé (retour, accueil) et pas seulement recouvert (balance, minuteurs) : plus de recette affichée.
+        view.post { if (!a.isOpen(this)) a.machine.reportRecipe(null) }
     }
 
     private fun launch() {
@@ -637,7 +648,49 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         return n
     }
 
+    /**
+     * Étape affichée et ce qu'elle attend, pour la domotique (notifications Home Assistant). Lecture
+     * seule : le service machine ne fait que la garder pour le serveur d'état.
+     */
+    private fun progress(s: Snapshot): RecipeProgress? {
+        val step = recipe.steps.getOrNull(index) ?: return null
+        val last = index == recipe.steps.size - 1
+        val launched = launchedActive(s)
+        val hasMachine = machine(index) != null
+        val reason = when {
+            launched -> ""
+            step.weigh != null && index !in done -> "weigh"
+            hasMachine && index in done -> if (last) "finish" else "next"
+            hasMachine -> "start"
+            last -> "finish"
+            else -> "hand"
+        }
+        if (ingredientsOf != index) {
+            ingredientsOf = index
+            stepIngredients = try {
+                val all = recipe.allIngredients
+                StepIngredients.mentioned(all, step.text).map { k ->
+                    val i = all[k]
+                    "${IngredientsCard.quantity(i)} ${IngredientsCard.name(i)}".trim()
+                }
+            } catch (_: Exception) { emptyList() }
+        }
+        return RecipeProgress(
+            title = recipe.title,
+            step = index + 1,
+            stepCount = recipe.steps.size,
+            stepText = step.text.ifBlank { machine(index)?.summary ?: "" },
+            waiting = !launched,
+            waitingFor = reason,
+            weighG = step.weigh?.grams ?: 0,
+            weighLabel = step.weigh?.label ?: "",
+            ingredients = stepIngredients,
+            stepSinceMs = stepSince,
+        )
+    }
+
     override fun onSnapshot(s: Snapshot) {
+        if (!stopped) a.machine.reportRecipe(progress(s))
         val w = recipe.steps.getOrNull(index)?.weigh
         if (w != null) {
             weighValue.text = if (s.hasSample) "${s.weightG} g" else "—"
