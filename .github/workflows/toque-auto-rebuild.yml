@@ -1,0 +1,252 @@
+# Chaque jour : si Wuki60 a publié une nouvelle version (tag vX.Y.Z), reconstruit la version combinée
+# Toque (domotique + Cookomix + Jow) sur cette version, la teste, la compile, vérifie la clé de
+# signature, pousse la branche toque-combo-XYZ et ouvre une issue pour prévenir.
+# Rien n'est jamais publié en release ni installé : l'APK reste un artefact de cette exécution,
+# à installer à la main par adb après vérification de l'empreinte.
+# En cas de conflit hors numéros de version, d'échec des tests ou de clé différente : une issue
+# décrit le problème et rien n'est poussé.
+name: Reconstruire Toque sur la dernière version amont
+
+on:
+  schedule:
+    - cron: "17 5 * * *" # tous les jours vers 05:17 UTC
+  workflow_dispatch:
+    inputs:
+      target_tag:
+        description: "Tag amont (ex. v0.9.1). Vide : le plus récent."
+        required: false
+        default: ""
+      source_branch:
+        description: "Branche Toque à reporter (ex. toque-combo-090). Vide : la plus récente."
+        required: false
+        default: ""
+      dry_run:
+        description: "Essai : compiler sans pousser de branche ni ouvrir d'issue."
+        type: boolean
+        default: false
+  # Essai automatique quand ces fichiers changent (recompile la version combinée actuelle).
+  pull_request:
+    paths:
+      - ".github/toque/**"
+      - ".github/workflows/toque-auto-rebuild.yml"
+
+permissions: {}
+
+concurrency:
+  group: toque-auto-rebuild
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://github.com/Wuki60/MrCuisineVibeConnect.git
+  # Empreinte SHA-256 du certificat de signature (app/signature/toque.p12, CN=Toque) : celle de
+  # l'APK installé sur le robot. Une autre clé rendrait la mise à jour impossible par-dessus.
+  TOQUE_CERT_SHA256: 41e69a019f92e2a78ec9c44e68a13ad8adc1293406b85a5616528e317822224c
+
+jobs:
+  build:
+    # Aucun droit d'écriture ici : ce job exécute le code amont (Gradle).
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      status: ${{ steps.merge.outputs.status }}
+      tag: ${{ steps.merge.outputs.tag }}
+      branch: ${{ steps.merge.outputs.branch }}
+      source: ${{ steps.merge.outputs.source }}
+      version_name: ${{ steps.merge.outputs.version_name }}
+      version_code: ${{ steps.merge.outputs.version_code }}
+      commit: ${{ steps.merge.outputs.commit }}
+      sha256: ${{ steps.apk.outputs.sha256 }}
+      failed_step: ${{ steps.failed.outputs.step }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Scripts de reconstruction hors du dépôt
+        run: cp -r .github/toque "$RUNNER_TEMP/toque"
+
+      - name: Fusion avec la dernière version amont
+        id: merge
+        env:
+          TARGET_TAG: ${{ inputs.target_tag }}
+          SOURCE_BRANCH: ${{ inputs.source_branch }}
+          DRY_RUN: ${{ github.event_name == 'pull_request' || inputs.dry_run == true }}
+          REPORT: ${{ runner.temp }}/rapport.md
+        run: |
+          git config user.name "Toque (reconstruction automatique)"
+          git config user.email "toque-bot@users.noreply.github.com"
+          bash "$RUNNER_TEMP/toque/rebuild.sh"
+          cat "$REPORT" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/setup-java@v6
+        if: steps.merge.outputs.status == 'ready'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Tests et compilation (Connect)
+        id: gradle
+        if: steps.merge.outputs.status == 'ready'
+        run: ./gradlew --no-daemon :core:test :app:assembleRelease
+
+      - name: Clé de signature et empreinte
+        id: apk
+        if: steps.merge.outputs.status == 'ready'
+        env:
+          NAME: ${{ steps.merge.outputs.version_name }}
+        run: |
+          apk="Toque-$NAME.apk"
+          cp app/build/outputs/apk/release/app-release.apk "$apk"
+          apksigner=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$apksigner" verify --print-certs "$apk" | tee certs.txt
+          got=$(grep -m1 'certificate SHA-256 digest' certs.txt | awk '{print $NF}' | tr -d ':' | tr 'A-F' 'a-f')
+          signers=$(grep -c '^Signer #[0-9]* certificate DN' certs.txt || true)
+          if [ "$got" != "$TOQUE_CERT_SHA256" ] || [ "$signers" != 1 ]; then
+            echo "::error::Clé de signature inattendue ($got, $signers signataire(s)) : l'APK ne s'installerait pas par-dessus."
+            exit 1
+          fi
+          sha256sum "$apk" | tee "$apk.sha256"
+          { echo; echo "- APK : \`$apk\`, SHA-256 \`$(cut -d' ' -f1 "$apk.sha256")\`"; echo "- Clé de signature conforme (\`$got\`)"; } >> "$GITHUB_STEP_SUMMARY"
+          echo "sha256=$(cut -d' ' -f1 "$apk.sha256")" >> "$GITHUB_OUTPUT"
+          echo "file=$apk" >> "$GITHUB_OUTPUT"
+
+      - name: Étape en échec
+        id: failed
+        if: failure()
+        run: |
+          if [ "${{ steps.gradle.outcome }}" = failure ]; then echo "step=tests ou compilation" >> "$GITHUB_OUTPUT"
+          elif [ "${{ steps.apk.outcome }}" = failure ]; then echo "step=vérification de la clé de signature" >> "$GITHUB_OUTPUT"
+          else echo "step=préparation" >> "$GITHUB_OUTPUT"; fi
+
+      - name: Paquet git de la nouvelle branche
+        if: steps.apk.outcome == 'success'
+        env:
+          BRANCH: ${{ steps.merge.outputs.branch }}
+          TAG: ${{ steps.merge.outputs.tag }}
+          SOURCE: ${{ steps.merge.outputs.source }}
+        run: git bundle create "$RUNNER_TEMP/toque.bundle" "refs/heads/$BRANCH" "^$TAG" "^origin/$SOURCE"
+
+      - uses: actions/upload-artifact@v7
+        if: steps.apk.outcome == 'success'
+        with:
+          name: Toque-${{ steps.merge.outputs.version_name }}
+          path: |
+            ${{ steps.apk.outputs.file }}
+            ${{ steps.apk.outputs.file }}.sha256
+          retention-days: 90
+
+      - uses: actions/upload-artifact@v7
+        if: always() && steps.merge.outputs.status != 'up-to-date'
+        with:
+          name: reconstruction
+          path: |
+            ${{ runner.temp }}/rapport.md
+            ${{ runner.temp }}/rapport.md.diff
+            ${{ runner.temp }}/toque.bundle
+          if-no-files-found: ignore
+          retention-days: 90
+
+  publish:
+    # Ne compile rien : pousse la branche déjà testée et prévient par une issue.
+    needs: build
+    if: ${{ !cancelled() && needs.build.outputs.status != 'up-to-date' && github.event_name != 'pull_request' && inputs.dry_run != true }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          # Pousser une branche qui contient des fichiers .github/workflows exige un jeton ayant le
+          # droit « Workflows » : secret facultatif TOQUE_PUSH_TOKEN. Sans lui, essai avec GITHUB_TOKEN.
+          token: ${{ secrets.TOQUE_PUSH_TOKEN || github.token }}
+
+      - uses: actions/download-artifact@v8
+        continue-on-error: true
+        with:
+          name: reconstruction
+          path: ${{ runner.temp }}/reconstruction
+
+      - name: Pousser la branche (nouvelle, jamais forcée)
+        id: push
+        if: needs.build.result == 'success' && needs.build.outputs.status == 'ready'
+        continue-on-error: true
+        env:
+          BRANCH: ${{ needs.build.outputs.branch }}
+          TAG: ${{ needs.build.outputs.tag }}
+          COMMIT: ${{ needs.build.outputs.commit }}
+        run: |
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch --quiet --no-tags upstream "+refs/tags/$TAG:refs/tags/$TAG"
+          git fetch --quiet "$RUNNER_TEMP/reconstruction/toque.bundle" "refs/heads/$BRANCH:refs/heads/$BRANCH"
+          test "$(git rev-parse "refs/heads/$BRANCH")" = "$COMMIT"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "::error::La branche $BRANCH existe déjà : rien n'est écrasé."
+            exit 1
+          fi
+          git push origin "refs/heads/$BRANCH:refs/heads/$BRANCH"
+
+      - name: Prévenir par une issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OWNER: ${{ github.repository_owner }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          BUILD_RESULT: ${{ needs.build.result }}
+          STATUS: ${{ needs.build.outputs.status }}
+          TAG: ${{ needs.build.outputs.tag }}
+          BRANCH: ${{ needs.build.outputs.branch }}
+          NAME: ${{ needs.build.outputs.version_name }}
+          CODE: ${{ needs.build.outputs.version_code }}
+          SHA256: ${{ needs.build.outputs.sha256 }}
+          FAILED_STEP: ${{ needs.build.outputs.failed_step }}
+          PUSH: ${{ steps.push.outcome }}
+        run: |
+          report="$RUNNER_TEMP/reconstruction/rapport.md"
+          [ -f "$report" ] || echo "(compte rendu indisponible)" > "$report"
+          body="$RUNNER_TEMP/issue.md"
+          if [ "$STATUS" = ready ] && [ "$BUILD_RESULT" = success ]; then
+            title="Toque $NAME prête (versionCode $CODE) : à installer après accord"
+            label="toque-prete"
+            {
+              echo "La version combinée sur **$TAG** a été reconstruite, testée (\`:core:test\`) et compilée."
+              echo "La clé de signature est bien celle de l'APK installé (\`${TOQUE_CERT_SHA256:0:16}…\`)."
+              echo
+              if [ "$PUSH" = success ]; then
+                echo "- Branche : [\`$BRANCH\`]($REPO_URL/tree/$BRANCH)"
+              else
+                echo "- ⚠️ Branche \`$BRANCH\` **non poussée** (droit « Workflows » manquant ?). Le paquet git \`toque.bundle\` est dans l'artefact « reconstruction »."
+              fi
+              echo "- APK : artefact **Toque-$NAME** de [cette exécution]($RUN_URL) (conservé 90 jours)"
+              echo "- SHA-256 de l'APK : \`$SHA256\`"
+              echo
+              echo "Rien n'a été installé. Après téléchargement : comparer l'empreinte (\`shasum -a 256 Toque-$NAME.apk\`), puis \`adb install -r\`."
+              echo
+              cat "$report"
+            } > "$body"
+          elif [ "$STATUS" = conflict ]; then
+            title="Toque $TAG : reconstruction bloquée par un conflit"
+            label="toque-conflit"
+            { echo "La fusion des ajouts Toque sur **$TAG** demande une intervention : rien n'a été compilé ni poussé."
+              echo "Le diff complet est dans l'artefact « reconstruction » de [cette exécution]($RUN_URL)."
+              echo; cat "$report"; } > "$body"
+          else
+            title="Toque ${TAG:-amont} : reconstruction en échec (${FAILED_STEP:-préparation})"
+            label="toque-echec"
+            { echo "La reconstruction automatique a échoué à l'étape **${FAILED_STEP:-préparation}** : rien n'a été poussé."
+              echo "Journal : [exécution]($RUN_URL)."
+              echo; cat "$report"; } > "$body"
+          fi
+          # Le corps d'une issue est limité à 65 536 caractères.
+          head -c 60000 "$body" > "$body.cut"
+          gh label create "$label" --color BFD4F2 --force >/dev/null 2>&1 || true
+          existing=$(gh issue list --state open --label "$label" --search "\"$title\" in:title" --json number --jq '.[0].number // empty')
+          cat "$body.cut" >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "$existing" ]; then
+            echo "Issue #$existing déjà ouverte pour ce résultat : pas de doublon."
+          else
+            gh issue create --title "$title" --body-file "$body.cut" --label "$label" --assignee "$OWNER"
+          fi
