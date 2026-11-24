@@ -75,6 +75,8 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
     private fun machine(i: Int): StepMachine? = adopted[i] ?: recipe.steps.getOrNull(i)?.machine
     /** Bip de pesée : armé tant que le poids est sous la quantité, joué une fois en l'atteignant. */
     private var weighArmed = false
+    /** Ce qui est versé à l'étape de pesée affichée, noté en la quittant (liste de courses). */
+    private val tally = app.toque.core.net.WeighTally()
     /** Cuisson déjà comptée (« Récentes », « Les plus cuisinées ») pendant cet écran. */
     private var counted = false
 
@@ -149,6 +151,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
                 val ing = recipe.steps.getOrNull(index)?.weigh?.label ?: recipe.steps.getOrNull(index)?.text?.take(30)
                 ScaleScreen.history.add(ScaleScreen.WeightEntry(time, curW, ing))
             }
+            tally.tare(curW)
             a.machine.tare()
         })
         weighBox.addView(wRow)
@@ -182,6 +185,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         if (index >= recipe.steps.size - 1) {
             countCooked()
             a.prefs.guidedRecipe = ""
+            recordWeighed()
             a.chime(1)
             // « Bon appétit ! » et la suite : nettoyage, note, Terminer.
             val seconds = if (fromStart) ((SystemClock.elapsedRealtime() - openedAt) / 1000).toInt() else 0
@@ -206,6 +210,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
     private fun stopRecipe() {
         if (stopped) return
         stopped = true
+        recordWeighed()
         if (launchedActive(a.snapshot)) a.machine.stop()
         launchedStep = -1
         launchedCount = 1
@@ -220,11 +225,12 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
 
     private fun go(i: Int) {
         if (i < 0 || i >= recipe.steps.size) return
+        recordWeighed()
         index = i
         weighArmed = false
         a.prefs.guidedRecipe = recipe.id
         a.prefs.guidedStep = index
-        autoTare()
+        tally.arrive(autoTare())
         render()
     }
 
@@ -233,11 +239,29 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
      * le contenu déjà dans le bol. Jamais pendant un programme, ni bol retiré quand le capteur est exigé
      * (pas à l'ouverture de l'écran : une pesée reprise après coup garderait son poids).
      */
-    private fun autoTare() {
+    private fun autoTare(): Boolean {
         val s = a.snapshot
-        if (recipe.steps.getOrNull(index)?.weigh == null || !a.prefs.autoTareSteps) return
-        if (!s.ready || s.busy || (a.prefs.requireBowl && !s.bowlDetected)) return
+        if (recipe.steps.getOrNull(index)?.weigh == null || !a.prefs.autoTareSteps) return false
+        if (!s.ready || s.busy || (a.prefs.requireBowl && !s.bowlDetected)) return false
         a.machine.tare(auto = true)
+        return true
+    }
+
+    /**
+     * En quittant une étape de pesée : ce qui a réellement été versé part dans le journal de consommation
+     * (liste de courses Home Assistant). Seulement si la balance a été remise à zéro sur l'étape (tare
+     * automatique ou « Tare »), sinon le poids comprendrait le contenu du bol.
+     */
+    private fun recordWeighed() {
+        if (recipe.steps.getOrNull(index)?.weigh == null) return
+        val s = a.snapshot
+        val grams = tally.leave(s.weightG, s.hasSample) ?: return
+        val name = app.toque.core.net.ConsumedName.of(recipe, index) ?: return
+        try {
+            app.toque.Consumption.of(c).add(name, grams, recipe.title)
+        } catch (_: Exception) {
+            // Le journal est un confort : une erreur d'écriture ne doit jamais gêner la recette.
+        }
     }
 
     private fun render() {

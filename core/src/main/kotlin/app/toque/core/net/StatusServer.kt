@@ -15,7 +15,8 @@ import java.security.SecureRandom
 /**
  * Serveur d'état en LECTURE SEULE pour la domotique (Home Assistant…), désactivé par défaut.
  *
- * - Une seule route : `GET /api/v1/status`, qui renvoie l'état de la machine en JSON.
+ * - `GET /api/v1/status` renvoie l'état de la machine en JSON ; `GET /api/v1/consumption?since=<id>` les
+ *   ingrédients pesés en recette guidée (quand [consumption] est fourni).
  * - Aucune commande : rien de ce qui arrive par le réseau ne peut démarrer, arrêter ni régler le moteur
  *   ou la chauffe. Le serveur ne voit la machine qu'au travers de [snapshot], une lecture.
  * - Jeton obligatoire (`Authorization: Bearer <jeton>`), comparé en temps constant.
@@ -35,6 +36,12 @@ class StatusServer(
     private val expected = token.toByteArray(StandardCharsets.UTF_8)
     @Volatile private var server: ServerSocket? = null
     @Volatile private var thread: Thread? = null
+
+    /**
+     * Ingrédients pesés pendant les recettes guidées, après le curseur donné (`GET /api/v1/consumption?since=`),
+     * déjà passés par [ConsumedEntry.publicMap] ; null : route absente (404).
+     */
+    @Volatile var consumption: ((since: Long) -> List<Map<String, Any?>>)? = null
 
     init {
         require(token.length >= MIN_TOKEN) { "jeton trop court" }
@@ -99,13 +106,15 @@ class StatusServer(
         if (parts.size != 3 || !parts[2].startsWith("HTTP/1.")) return respond(c, 400, error("requête illisible"))
         val (method, target) = parts
         val path = target.substringBefore('?')
-        if (path != PATH) return respond(c, 404, error("inconnu"))
+        val feed = consumption
+        if (path != PATH && (path != CONSUMPTION_PATH || feed == null)) return respond(c, 404, error("inconnu"))
         if (method != "GET") return respond(c, 405, error("lecture seule"), "Allow: GET\r\n")
         val auth = lines.drop(1).firstOrNull { it.startsWith("Authorization:", ignoreCase = true) }
             ?.substringAfter(':')?.trim().orEmpty()
         val given = if (auth.startsWith("Bearer ", ignoreCase = true)) auth.substring(7).trim() else ""
         if (!MessageDigest.isEqual(given.toByteArray(StandardCharsets.UTF_8), expected))
             return respond(c, 401, error("jeton absent ou faux"), "WWW-Authenticate: Bearer\r\n")
+        if (path == CONSUMPTION_PATH && feed != null) return respond(c, 200, Json.write(consumptionBody(feed, target)))
         respond(c, 200, Json.write(body(snapshot())))
     }
 
@@ -114,6 +123,13 @@ class StatusServer(
         "device" to info(),
         "state" to s?.let { publicState(it) },
     )
+
+    private fun consumptionBody(feed: (Long) -> List<Map<String, Any?>>, target: String): Map<String, Any?> {
+        val since = target.substringAfter('?', "").split('&')
+            .firstOrNull { it.startsWith("since=") }?.substringAfter('=')?.toLongOrNull()?.coerceAtLeast(0) ?: 0L
+        val entries = try { feed(since) } catch (_: Exception) { emptyList() }
+        return linkedMapOf("api" to API_VERSION, "entries" to entries)
+    }
 
     private fun error(message: String) = Json.write(mapOf("error" to message))
 
@@ -132,6 +148,8 @@ class StatusServer(
 
     companion object {
         const val PATH = "/api/v1/status"
+        /** Ingrédients pesés en recette guidée (liste de courses), même jeton, lecture seule. */
+        const val CONSUMPTION_PATH = "/api/v1/consumption"
         const val API_VERSION = 1
         const val DEFAULT_PORT = 8766
         const val MIN_TOKEN = 16

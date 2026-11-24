@@ -199,6 +199,9 @@ class MachineService : Service() {
         try {
             server.start()
             status = server
+            // Liste de courses : ingrédients pesés en recette guidée (fichier écrit par l'interface).
+            val consumed = app.toque.Consumption.of(this)
+            server.consumption = { since -> consumed.since(since).map { it.publicMap() } }
             statusKey = key
         } catch (e: Exception) {
             log.write("domotique", "serveur d'état impossible à ouvrir : $e")
