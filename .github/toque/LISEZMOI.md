@@ -3,7 +3,9 @@
 Le workflow `.github/workflows/toque-auto-rebuild.yml` tourne chaque jour (vers 05:17 UTC). Quand
 Wuki60 publie un nouveau tag `vX.Y.Z`, il :
 
-1. crée la branche `toque-combo-XYZ` depuis ce tag et y fusionne la dernière `toque-combo-NNN`
+1. crée la branche `toque-combo-vX.Y.Z` depuis ce tag et y fusionne la branche `toque-combo-*`
+   la plus avancée (base amont la plus récente, puis versionCode le plus haut ; les noms des
+   branches faites à la main, comme `toque-combo-091`, ne comptent pas)
    (domotique, Cookomix, Jow) ;
 2. résout seul un seul type de conflit : les lignes `versionCode` / `versionName` ;
 3. écrit la version `X.Y.Z-<suffixe actuel>` et un `versionCode` supérieur à la fois à l'installé
@@ -29,7 +31,7 @@ une issue décrit le problème et aucune branche n'est poussée.
 ## Lancer à la main
 
 Actions › « Reconstruire Toque sur la dernière version amont » › Run workflow. Champs facultatifs :
-tag amont, branche source, et **Essai** (compile une branche `-essai`, sans pousser ni ouvrir
+tag amont, branche source, et **Essai** (compile une branche `toque-combo-vX.Y.Z-essai`, sans pousser ni ouvrir
 d'issue ; la version porte le suffixe `-essai`, à ne pas installer).
 
 ## Essai local

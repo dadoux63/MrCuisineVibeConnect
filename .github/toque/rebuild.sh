@@ -10,7 +10,7 @@
 # Variables d'entrée (toutes facultatives) :
 #   UPSTREAM_URL   dépôt amont (défaut : Wuki60/MrCuisineVibeConnect)
 #   TARGET_TAG     tag amont à utiliser (défaut : le plus récent vX.Y.Z)
-#   SOURCE_BRANCH  branche Toque à reporter (défaut : la toque-combo-NNN la plus récente)
+#   SOURCE_BRANCH  branche Toque à reporter (défaut : la toque-combo-* de base amont la plus récente, puis de versionCode le plus haut)
 #   WORKDIR        dossier de travail (défaut : dossier courant, un clone du fork)
 #   OUT            fichier de sortie clé=valeur (défaut : $GITHUB_OUTPUT ou /dev/stdout)
 #   REPORT         fichier du compte rendu en Markdown (défaut : rapport.md)
@@ -42,30 +42,44 @@ git fetch --quiet origin '+refs/heads/toque-combo-*:refs/remotes/origin/toque-co
 tag=${TARGET_TAG:-$(git tag -l 'v*' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)}
 git rev-parse -q --verify "refs/tags/$tag^{commit}" >/dev/null || fail error "Tag amont introuvable : $tag"
 ver=${tag#v}
-branch="toque-combo-${ver//./}"
+# Nom sans ambiguïté avec les branches faites à la main (ex. toque-combo-091 basée sur v0.9.0) :
+# toque-combo-v0.9.1 désigne toujours le tag amont v0.9.1.
+branch="toque-combo-v$ver"
 dry=${DRY_RUN:-false}
 [ "$dry" = true ] && branch="$branch-essai"
 out tag "$tag"
 out branch "$branch"
 
-if [ "$dry" != true ] && git rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null; then
-  out status up-to-date
-  echo "La branche $branch existe déjà : rien à faire." >&2
-  exit 0
-fi
-
-# Branche source : la toque-combo-NNN dont le tag amont de base est le plus récent, antérieur à $tag.
 ver_lt() { [ "$1" != "$2" ] && [ "$(printf '%s\n%s\n' "$1" "$2" | sort -V | head -1)" = "$1" ]; }
 base_of() { git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*' --exclude '*-*' "$1" 2>/dev/null | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; }
+read_gradle() { git show "$1:$GRADLE" | grep -oP "$2"'\s*=\s*"?\K[^"\s]+' | head -1; }
+
+# Branches Toque connues (toutes les toque-combo-*, sauf les essais), avec leur tag amont de base
+# (déduit de l'historique, pas du nom) et leur versionCode : « base versionCode branche ».
+candidates=$(for b in $(git for-each-ref --format='%(refname:short)' 'refs/remotes/origin/toque-combo-*' | grep -v -- '-essai$' || true); do
+               bt=$(base_of "$b"); vc=$(read_gradle "$b" versionCode 2>/dev/null || true)
+               if [ -n "$bt" ] && [ -n "$vc" ]; then echo "${bt#v} $vc $b"; fi
+             done)
+
+if [ "$dry" != true ]; then
+  done_on=$(echo "$candidates" | awk -v v="$ver" '$1 == v {print $3}' | head -1)
+  if [ -n "$done_on" ] || git rev-parse -q --verify "refs/remotes/origin/$branch" >/dev/null; then
+    out status up-to-date
+    echo "$tag est déjà repris dans ${done_on:-$branch} : rien à faire." >&2
+    exit 0
+  fi
+fi
+
+# Branche source : base amont la plus récente (antérieure à $tag), puis versionCode le plus haut.
 if [ -n "${SOURCE_BRANCH:-}" ]; then
   source="origin/${SOURCE_BRANCH#origin/}"
   git rev-parse -q --verify "$source" >/dev/null || fail error "Branche source introuvable : $source"
 else
-  source=$(for b in $(git for-each-ref --format='%(refname:short)' 'refs/remotes/origin/toque-combo-*' | grep -E '/toque-combo-[0-9]+$' || true); do
-             bt=$(base_of "$b")
-             if [ -n "$bt" ] && { ver_lt "${bt#v}" "$ver" || { [ "$dry" = true ] && [ "${bt#v}" = "$ver" ]; }; }; then echo "${bt#v} $b"; fi
-           done | sort -V | tail -1 | cut -d' ' -f2)
-  [ -n "$source" ] || fail error "Aucune branche toque-combo-NNN antérieure à $tag."
+  source=$(echo "$candidates" | while read -r bv vc b; do
+             [ -n "$b" ] || continue
+             if ver_lt "$bv" "$ver" || { [ "$dry" = true ] && [ "$bv" = "$ver" ]; }; then echo "$bv $vc $b"; fi
+           done | sort -k1,1V -k2,2n | tail -1 | cut -d' ' -f3)
+  [ -n "$source" ] || fail error "Aucune branche toque-combo-* antérieure à $tag."
 fi
 base=$(base_of "$source")
 [ -n "$base" ] || fail error "Tag amont de base introuvable pour $source."
@@ -73,7 +87,6 @@ git merge-base --is-ancestor "$base" "$tag" || fail error "$base n'est pas un an
 out source "${source#origin/}"
 
 # 2. Numéros de version : versionCode strictement croissant (au-dessus de l'installé et de l'amont).
-read_gradle() { git show "$1:$GRADLE" | grep -oP "$2"'\s*=\s*"?\K[^"\s]+' | head -1; }
 prev_code=$(read_gradle "$source" versionCode)
 prev_name=$(read_gradle "$source" versionName)
 up_code=$(read_gradle "$tag" versionCode)

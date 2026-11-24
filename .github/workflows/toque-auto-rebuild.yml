@@ -1,6 +1,6 @@
 # Chaque jour : si Wuki60 a publié une nouvelle version (tag vX.Y.Z), reconstruit la version combinée
 # Toque (domotique + Cookomix + Jow) sur cette version, la teste, la compile, vérifie la clé de
-# signature, pousse la branche toque-combo-XYZ et ouvre une issue pour prévenir.
+# signature, pousse la branche toque-combo-vX.Y.Z et ouvre une issue pour prévenir.
 # Rien n'est jamais publié en release ni installé : l'APK reste un artefact de cette exécution,
 # à installer à la main par adb après vérification de l'empreinte.
 # En cas de conflit hors numéros de version, d'échec des tests ou de clé différente : une issue
