@@ -26,7 +26,8 @@ import java.util.Locale
  * robot, convertie (voir [Cookomix] et [Jow]) puis ajoutée à Mes recettes. Processus de l'interface uniquement : le
  * pilotage (« :machine ») n'est jamais concerné.
  *
- * Usage strictement personnel (CGU de Cookomix et de Jow) : une recette à la fois, rien n'est publié.
+ * Usage strictement personnel (CGU de Cookomix et de Jow) : recettes choisies par l'utilisateur, une
+ * par une (10 au plus par envoi), rien n'est publié.
  */
 object CookomixInbox {
     private var server: RecipeInbox? = null
@@ -98,6 +99,8 @@ object CookomixInbox {
             }
         }
         app.recipes.upsertAll(listOf(recipe), rebuild = false)
+        // « Cette semaine » : recettes prévues (Jow par défaut), retirées de la liste une fois cuisinées.
+        if (req.week) app.recipes.addToWeek(recipe.id)
         // L'index de recherche est reconstruit à part : la réponse part tout de suite.
         Thread({
             try { app.recipes.refresh() } catch (e: Exception) { app.log.write("cookomix", "réindexation : $e") }
@@ -110,7 +113,8 @@ object CookomixInbox {
             "$machine réglages, ${approx.size} adaptations, photo : ${if (photo) "oui" else "non"})")
         val message = tr("« %s » %s dans Mes recettes : %d ingrédients, %d étapes dont %d réglages machine, tous à vérifier sur le robot.",
             recipe.title, if (before == null) tr("ajoutée") else tr("mise à jour"), recipe.allIngredients.size, recipe.steps.size, machine) +
-            if (photo) " " + tr("Photo ajoutée.") else ""
+            (if (photo) " " + tr("Photo ajoutée.") else "") +
+            (if (req.week) " " + tr("Ajoutée à « Cette semaine ».") else "")
         return RecipeInbox.Reply.ok(linkedMapOf(
             "message" to message,
             "id" to recipe.id,
@@ -119,6 +123,7 @@ object CookomixInbox {
             "steps" to recipe.steps.size,
             "machine_steps" to machine,
             "photo" to photo,
+            "week" to req.week,
             "warnings" to warnings,
         ))
     }

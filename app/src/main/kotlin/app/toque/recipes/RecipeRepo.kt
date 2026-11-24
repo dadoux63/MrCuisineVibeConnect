@@ -39,6 +39,8 @@ class RecipeRepo(private val context: Context) {
                 // Recettes cuisinées : nombre de fois et dernière fois (ms), pour « Récentes » et
                 // « Les plus cuisinées ».
                 db.execSQL("CREATE TABLE IF NOT EXISTS cooked (id TEXT PRIMARY KEY, count INTEGER NOT NULL, last INTEGER NOT NULL)")
+                // « Cette semaine » : recettes prévues (reçues du téléphone), dans l'ordre d'arrivée (ms).
+                db.execSQL("CREATE TABLE IF NOT EXISTS week (id TEXT PRIMARY KEY, added INTEGER NOT NULL)")
             }
         }
 
@@ -59,6 +61,8 @@ class RecipeRepo(private val context: Context) {
     /** Une recette cuisinée [count] fois, la dernière à [lastMs]. */
     class Usage(val count: Int, val lastMs: Long)
     private val cooked = ConcurrentHashMap<String, Usage>()
+    /** « Cette semaine » : identifiant → moment d'arrivée (ms). */
+    private val week = ConcurrentHashMap<String, Long>()
     /** Adaptations personnelles (note, quantités, pesées), par identifiant de recette. */
     private val adjustments = ConcurrentHashMap<String, RecipeAdjustments>()
     @Volatile private var adjustmentsLoaded = false
@@ -113,6 +117,12 @@ class RecipeRepo(private val context: Context) {
         }
         cooked.clear()
         cooked.putAll(usage)
+        val planned = HashMap<String, Long>()
+        db.rawQuery("SELECT id, added FROM week", null).use { c ->
+            while (c.moveToNext()) planned[c.getString(0)] = c.getLong(1)
+        }
+        week.clear()
+        week.putAll(planned)
         index = SearchIndex(list)
         loaded = true
         notifyChanged()
@@ -324,15 +334,16 @@ class RecipeRepo(private val context: Context) {
         exec.execute { rebuild() }
     }
 
-    /** Supprime une recette perso, avec sa note, ses corrections, son favori et ses cuissons. */
+    /** Supprime une recette perso, avec sa note, ses corrections, son favori, ses cuissons et sa place dans la semaine. */
     fun deleteUser(id: String) {
         if (!UserRecipes.isUser(id)) return
         adjustments.remove(id)
         cooked.remove(id)
+        week.remove(id)
         synchronized(favorites) { favorites -= id }
         exec.submit {
             val db = helper.writableDatabase
-            for (table in listOf("recipes", "favorites", "adjustments", "cooked")) db.delete(table, "id = ?", arrayOf(id))
+            for (table in listOf("recipes", "favorites", "adjustments", "cooked", "week")) db.delete(table, "id = ?", arrayOf(id))
         }.get()
         exec.execute { rebuild() }
     }
@@ -407,10 +418,11 @@ class RecipeRepo(private val context: Context) {
         }
     }
 
-    /** Note qu'une recette vient d'être cuisinée (une fois par cuisson). */
+    /** Note qu'une recette vient d'être cuisinée (une fois par cuisson) ; elle sort de « Cette semaine ». */
     fun markCooked(id: String) {
         val now = System.currentTimeMillis()
         exec.execute {
+            if (week.remove(id) != null) helper.writableDatabase.delete("week", "id = ?", arrayOf(id))
             val u = cooked[id]
             val next = Usage((u?.count ?: 0) + 1, now)
             helper.writableDatabase.insertWithOnConflict("cooked", null, ContentValues().apply {
@@ -424,6 +436,45 @@ class RecipeRepo(private val context: Context) {
     }
 
     fun usage(id: String): Usage? = cooked[id]
+
+    /** « Cette semaine » : recettes prévues, de la première arrivée à la dernière (seulement celles du catalogue). */
+    fun weekIds(): List<String> {
+        val known = index.entries.mapTo(HashSet()) { it.id }
+        return week.entries.filter { it.key in known }.sortedBy { it.value }.map { it.key }
+    }
+
+    fun isInWeek(id: String): Boolean = week.containsKey(id)
+
+    val weekCount: Int get() = weekIds().size
+
+    /** Ajoute [id] à « Cette semaine » (une recette déjà prévue garde sa place). */
+    fun addToWeek(id: String) {
+        if (week.putIfAbsent(id, System.currentTimeMillis()) != null) return
+        exec.execute {
+            helper.writableDatabase.insertWithOnConflict("week", null, ContentValues().apply {
+                put("id", id)
+                put("added", week[id] ?: System.currentTimeMillis())
+            }, SQLiteDatabase.CONFLICT_IGNORE)
+            notifyChanged()
+        }
+    }
+
+    fun removeFromWeek(id: String) {
+        if (week.remove(id) == null) return
+        exec.execute {
+            helper.writableDatabase.delete("week", "id = ?", arrayOf(id))
+            notifyChanged()
+        }
+    }
+
+    /** « Vider la semaine » : les recettes restent dans Mes recettes, seule la liste est effacée. */
+    fun clearWeek() {
+        week.clear()
+        exec.execute {
+            helper.writableDatabase.delete("week", null, null)
+            notifyChanged()
+        }
+    }
 
     /** Recettes cuisinées, de la plus récente à la plus ancienne (seulement celles du catalogue). */
     fun recentIds(limit: Int = 60): List<String> {

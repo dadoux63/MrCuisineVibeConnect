@@ -52,6 +52,7 @@ class RecipeChipsTest {
         RecipeChip.Kind.COMMUNITY -> robotBefore(q, RecipeFilter(source = RecipeSource.COMMUNITY), "")
         RecipeChip.Kind.QUICK -> robotBefore(q, RecipeFilter(maxMinutes = 30), "")
         RecipeChip.Kind.CATEGORY -> robotBefore(q, RecipeFilter(category = chip.category), "")
+        RecipeChip.Kind.WEEK -> error("« Cette semaine » n'existait pas avant RecipeChip")
     }
 
     private val texts = listOf("", "  ", "soupe", "riz", "lait, riz", "eau,", "pomes", "xyzzy", "Soupe de")
@@ -104,5 +105,20 @@ class RecipeChipsTest {
         assertEquals(listOf("6"), RecipeChip.select(index, RecipeChip.RECENT, "riz", { recent }).map { it.entry.id })
         assertEquals(setOf("1", "3", "4", "5", "8", "9"), RecipeChip.select(index, RecipeChip.QUICK, "").map { it.entry.id }.toSet())
         assertEquals(listOf("perso-veloute"), RecipeChip.select(index, RecipeChip.USER, "").map { it.entry.id })
+    }
+
+    @Test fun thisWeekChipKeepsTheOrderOfArrival() {
+        assertFalse(RecipeChip.WEEK in RecipeChip.list(index))
+        assertEquals(1, RecipeChip.list(index, week = true).indexOf(RecipeChip.WEEK))
+        assertEquals(1, RecipeChip.list(index, RecipeChip.WEEK).indexOf(RecipeChip.WEEK))
+        val week = listOf("perso-veloute", "inconnue", "3", "1")
+        val sel = app.toque.core.recipes.ChipSelection.of(RecipeChip.WEEK)
+        assertTrue(sel.byUsage)
+        assertTrue(sel.isOn(RecipeChip.WEEK))
+        assertEquals(listOf("perso-veloute", "3", "1"), sel.select(index, "", weekIds = { week }).map { it.entry.id })
+        assertEquals(listOf("perso-veloute"), sel.select(index, "potimarron", weekIds = { week }).map { it.entry.id })
+        assertTrue(RecipeChip.WEEK in sel.chips(index))
+        assertTrue(sel.tap(RecipeChip.WEEK).isAll)
+        assertEquals("week", RecipeChip.WEEK.key)
     }
 }

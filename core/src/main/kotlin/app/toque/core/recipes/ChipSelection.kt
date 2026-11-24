@@ -63,7 +63,10 @@ data class ChipSelection(
     val quick: Boolean = false,
     val favorites: Boolean = false,
     val user: Boolean = false,
-    /** [RecipeChip.Kind.RECENT] ou [RecipeChip.Kind.FREQUENT] ; null : pas de vue par les cuissons. */
+    /**
+     * [RecipeChip.Kind.RECENT], [RecipeChip.Kind.FREQUENT] ou [RecipeChip.Kind.WEEK] (liste ordonnée,
+     * seule) ; null : pas de telle vue.
+     */
     val usage: RecipeChip.Kind? = null,
     /** Recettes de la communauté (toqueapp.org) ; jamais avec [user] : une recette n'a qu'une origine. */
     val community: Boolean = false,
@@ -78,7 +81,7 @@ data class ChipSelection(
     /** La pastille [chip] est allumée. */
     fun isOn(chip: RecipeChip): Boolean = when (chip.kind) {
         RecipeChip.Kind.ALL -> isAll
-        RecipeChip.Kind.RECENT, RecipeChip.Kind.FREQUENT -> usage == chip.kind
+        RecipeChip.Kind.RECENT, RecipeChip.Kind.FREQUENT, RecipeChip.Kind.WEEK -> usage == chip.kind
         RecipeChip.Kind.FAVORITES -> favorites
         RecipeChip.Kind.USER -> user
         RecipeChip.Kind.COMMUNITY -> community
@@ -96,7 +99,7 @@ data class ChipSelection(
         val filters = if (usage != null) ChipSelection() else this
         return when (chip.kind) {
             RecipeChip.Kind.ALL -> ChipSelection()
-            RecipeChip.Kind.RECENT, RecipeChip.Kind.FREQUENT -> if (usage == chip.kind) ChipSelection() else ChipSelection(usage = chip.kind)
+            RecipeChip.Kind.RECENT, RecipeChip.Kind.FREQUENT, RecipeChip.Kind.WEEK -> if (usage == chip.kind) ChipSelection() else ChipSelection(usage = chip.kind)
             RecipeChip.Kind.FAVORITES -> filters.copy(favorites = !filters.favorites)
             RecipeChip.Kind.USER -> filters.copy(user = !filters.user, community = false)
             RecipeChip.Kind.COMMUNITY -> filters.copy(community = !filters.community, user = false)
@@ -114,8 +117,9 @@ data class ChipSelection(
     )
 
     /** Les pastilles à montrer (celles de [RecipeChip.list]), « Mes recettes » ou « Communauté » gardée si elle est allumée. */
-    fun chips(index: SearchIndex): List<RecipeChip> {
-        val out = ArrayList(RecipeChip.list(index, if (user) RecipeChip.USER else if (community) RecipeChip.COMMUNITY else null))
+    fun chips(index: SearchIndex, week: Boolean = false): List<RecipeChip> {
+        val out = ArrayList(RecipeChip.list(index, if (user) RecipeChip.USER else if (community) RecipeChip.COMMUNITY else null,
+            week || usage == RecipeChip.Kind.WEEK))
         // Catégorie choisie disparue du catalogue (ou au-delà des premières) : reste visible pour l'éteindre.
         if (category.isNotEmpty() && out.none { it.kind == RecipeChip.Kind.CATEGORY && it.category == category }) out += RecipeChip.category(category)
         return out
@@ -131,9 +135,10 @@ data class ChipSelection(
         sort: RecipeSort = RecipeSort.TITLE,
         recentIds: () -> List<String> = { emptyList() },
         frequentIds: () -> List<String> = { emptyList() },
+        weekIds: () -> List<String> = { emptyList() },
     ): List<SearchIndex.Hit> {
         val u = usage
-        if (u != null) return RecipeChip.select(index, RecipeChip(u), query, recentIds, frequentIds)
+        if (u != null) return RecipeChip.select(index, RecipeChip(u), query, recentIds, frequentIds, weekIds)
         val f = filter
         val found = if (query.contains(',')) index.withIngredients(query.split(','), f) else index.search(query, f)
         return RecipeSort.apply(found, sort)
