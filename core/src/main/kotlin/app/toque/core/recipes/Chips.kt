@@ -9,7 +9,9 @@ import app.toque.core.i18n.tr
  */
 data class RecipeChip(val kind: Kind, val category: String = "") {
     enum class Kind(val key: String) {
-        ALL("all"), WEEK("week"), RECENT("recent"), FREQUENT("frequent"), FAVORITES("favorites"), USER("user"), COMMUNITY("community"), QUICK("quick"), CATEGORY("category");
+        ALL("all"), WEEK("week"), RECENT("recent"), FREQUENT("frequent"), FAVORITES("favorites"), USER("user"), COMMUNITY("community"), QUICK("quick"), CATEGORY("category"),
+        /** Recettes d'un serveur Mealie (ajoutée après les autres : son rang ne déplace aucune clé). */
+        MEALIE("mealie");
 
         companion object {
             fun of(key: String): Kind? = values().firstOrNull { it.key == key }
@@ -28,6 +30,7 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
         Kind.FAVORITES -> tr("Favoris")
         Kind.USER -> tr("Mes recettes")
         Kind.COMMUNITY -> tr("Communauté")
+        Kind.MEALIE -> "Mealie"
         Kind.QUICK -> tr("30 min max")
         Kind.CATEGORY -> category
     }
@@ -43,6 +46,7 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
         Kind.FAVORITES -> RecipeFilter(favoritesOnly = true)
         Kind.USER -> RecipeFilter(source = RecipeSource.USER)
         Kind.COMMUNITY -> RecipeFilter(source = RecipeSource.COMMUNITY)
+        Kind.MEALIE -> RecipeFilter(source = RecipeSource.MEALIE)
         Kind.QUICK -> RecipeFilter(maxMinutes = QUICK_MINUTES)
         Kind.CATEGORY -> RecipeFilter(category = category)
         else -> RecipeFilter()
@@ -56,6 +60,7 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
         val FAVORITES = RecipeChip(Kind.FAVORITES)
         val USER = RecipeChip(Kind.USER)
         val COMMUNITY = RecipeChip(Kind.COMMUNITY)
+        val MEALIE = RecipeChip(Kind.MEALIE)
         val QUICK = RecipeChip(Kind.QUICK)
         fun category(name: String) = RecipeChip(Kind.CATEGORY, name)
 
@@ -68,7 +73,7 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
          * Les pastilles, dans l'ordre de l'écran : « Toutes », « Cette semaine » (si [week] : des recettes
          * sont prévues, ou si c'est la pastille choisie), les autres fixes, « Mes recettes » (s'il y a une recette
          * perso, ou si c'est la pastille choisie), « Communauté » (de même, pour les recettes venues de
-         * toqueapp.org), « 30 min max », puis les 30 premières catégories.
+         * toqueapp.org), « Mealie » (de même), « 30 min max », puis les 30 premières catégories.
          */
         fun list(index: SearchIndex, selected: RecipeChip? = null, week: Boolean = false): List<RecipeChip> {
             val out = ArrayList<RecipeChip>(FIXED.size + 4 + MAX_CATEGORIES)
@@ -76,6 +81,7 @@ data class RecipeChip(val kind: Kind, val category: String = "") {
             if (week || selected?.kind == Kind.WEEK) out.add(1, WEEK)
             if (selected?.kind == Kind.USER || index.entries.any { it.source == RecipeSource.USER }) out += USER
             if (selected?.kind == Kind.COMMUNITY || index.entries.any { it.source == RecipeSource.COMMUNITY }) out += COMMUNITY
+            if (selected?.kind == Kind.MEALIE || index.entries.any { it.source == RecipeSource.MEALIE }) out += MEALIE
             out += QUICK
             for (cat in index.categories.take(MAX_CATEGORIES)) out += category(cat)
             return out
