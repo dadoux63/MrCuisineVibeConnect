@@ -21,8 +21,10 @@ import app.toque.core.i18n.I18n
 import app.toque.core.i18n.tr
 import app.toque.core.machine.RootShell
 import app.toque.core.machine.Snapshot
+import app.toque.core.net.StatusServer
 import app.toque.core.time.ZoneLookup
 import app.toque.core.update.Release
+import app.toque.recipes.CookomixInbox
 import app.toque.recipes.LidlSync
 import app.toque.core.recipes.McOnline
 import app.toque.recipes.OnlineSync
@@ -83,6 +85,8 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
     private lateinit var modeDot: View
     private lateinit var modeText: TextView
     private var unsubCompanion: (() -> Unit)? = null
+    private lateinit var homeText: TextView
+    private lateinit var inboxText: TextView
     private var settingTime = false
     private var mode = a.prefs.mode
 
@@ -386,6 +390,25 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
         files.addView(Ui.button(c, tr("Exporter"), Ui.Style.SECONDARY, Icon.Kind.UPLOAD, height = 52, textSize = 18f) { recipeFiles(export = true) }, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         files.addView(Ui.button(c, tr("Importer"), Ui.Style.SECONDARY, Icon.Kind.DOWNLOAD, height = 52, textSize = 18f) { recipeFiles(export = false) })
         p.addView(files, Ui.lp(t = 12, b = 8))
+        // Recette Cookomix envoyée depuis le téléphone : page web et API sur le réseau local.
+        group(p, tr("Depuis le téléphone"))
+        p.addView(toggle(tr("Recevoir des recettes Cookomix du téléphone"), a.prefs.cookomixInbox) { on ->
+            a.prefs.cookomixInbox = on
+            CookomixInbox.apply(a.app)
+            renderInbox()
+        }, Ui.lp(t = 8))
+        p.addView(hint(tr("Ouvrez l'adresse ci-dessous sur le téléphone (même Wi-Fi), collez l'adresse d'une recette Cookomix : le robot la convertit et l'ajoute ici. Une recette à la fois, pour votre usage personnel. Même jeton que la domotique.")),
+            Ui.lp(t = 4))
+        inboxText = hint("").apply { setTextIsSelectable(true) }
+        p.addView(inboxText, Ui.lp(t = 8, b = 8))
+        renderInbox()
+        // Recette reçue : recalculée pour le foyer (le même réglage que le − / + de la recette).
+        val people = (1..12).map { it.toString() to tr("%d pers.", it) }
+        p.addView(choice(tr("Personnes à table"), dropdown(people, a.prefs.householdServings.toString()) { n ->
+            a.prefs.householdServings = n.toInt()
+        }, width = 200), Ui.lp(t = 8))
+        p.addView(hint(tr("Les recettes reçues du téléphone s'ouvrent avec les quantités et les pesées recalculées pour ce nombre de personnes (de la moitié au double de la recette). Les temps et les températures restent ceux de la recette.")),
+            Ui.lp(t = 4, b = 8))
     }
 
     /** L'appli d'origine du robot : y reprendre ses recettes (là où Toque sait lire sa base), ou l'ouvrir. */
@@ -546,6 +569,26 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
         renderModes()
         line(p)
 
+        // Domotique : état en lecture seule pour Home Assistant (aucune commande à distance).
+        group(p, tr("Domotique"))
+        p.addView(toggle(tr("Publier l'état sur le réseau local"), a.prefs.homeEnabled) { on ->
+            if (on && a.prefs.homeToken.length < StatusServer.MIN_TOKEN) a.prefs.homeToken = StatusServer.newToken()
+            a.prefs.homeEnabled = on
+            a.machine.reconfigure { a.refusal(it) }
+            renderHome()
+        }, Ui.lp(t = 8))
+        p.addView(hint(tr("Lecture seule : température, vitesse, poids, couvercle, bol, programme et temps restant. Personne ne peut lancer, arrêter ni régler le robot par le réseau. À n'activer que sur un Wi-Fi de confiance.")),
+            Ui.lp(t = 4))
+        homeText = hint("").apply { setTextIsSelectable(true) }
+        p.addView(setting(homeText, Ui.button(c, tr("Nouveau jeton"), Ui.Style.SECONDARY, Icon.Kind.SYNC, height = 52, textSize = 18f) {
+            a.prefs.homeToken = StatusServer.newToken()
+            if (a.prefs.homeEnabled) a.machine.reconfigure { a.refusal(it) }
+            renderHome()
+            renderInbox()
+        }), Ui.lp(t = 8, b = 8))
+        renderHome()
+        line(p)
+
         // Les outils, deux par ligne.
         val tools = listOf<Pair<String, () -> Unit>>(
             tr("Diagnostic de la base moteur") to { a.push(DiagnosticsScreen(a)) },
@@ -583,6 +626,27 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
             letterSpacing = 0.08f
         }, Ui.lp(t = 14, b = 2))
     }
+
+    /** Adresse et jeton à recopier dans Home Assistant. */
+    private fun renderHome() {
+        homeText.text = if (!a.prefs.homeEnabled) tr("Désactivé.")
+        else tr("Adresse : %s · port %d\nJeton : %s", localAddress() ?: "?", a.prefs.homePort, a.prefs.homeToken)
+    }
+
+    /** Adresse à ouvrir sur le téléphone ; le jeton est dans le fragment (#), jamais envoyé sur le réseau par le navigateur. */
+    private fun renderInbox() {
+        if (!::inboxText.isInitialized) return
+        inboxText.text = if (!a.prefs.cookomixInbox) tr("Désactivé.")
+        else tr("Sur le téléphone : http://%s:%d/#t=%s", localAddress() ?: "?", CookomixInbox.port, a.prefs.homeToken)
+    }
+
+    /** Adresse IPv4 du robot sur le réseau local (sans permission Wi-Fi). */
+    private fun localAddress(): String? = try {
+        java.net.NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+            .filter { it.isUp && !it.isLoopback }
+            .flatMap { it.inetAddresses.toList() }
+            .firstOrNull { it is java.net.Inet4Address && !it.isLoopbackAddress }?.hostAddress
+    } catch (_: Exception) { null }
 
     /** Trait fin entre deux réglages. */
     private fun line(page: LinearLayout) {

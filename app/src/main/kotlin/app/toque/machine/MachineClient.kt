@@ -20,6 +20,7 @@ import app.toque.core.machine.LinkState
 import app.toque.core.machine.MachineEvent
 import app.toque.core.machine.Snapshot
 import app.toque.core.machine.Verdict
+import app.toque.core.net.RecipeProgress
 
 /** Côté interface : liaison avec [MachineService]. Tous les rappels arrivent sur le fil principal. */
 class MachineClient(private val context: Context) {
@@ -64,6 +65,8 @@ class MachineClient(private val context: Context) {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             service = Messenger(binder)
             sendRaw(Ipc.REGISTER, null, null)
+            // Service relancé : il a perdu la recette affichée.
+            lastRecipe?.let { sendRaw(Ipc.RECIPE, Ipc.recipeToBundle(it), null) }
         }
 
         override fun onServiceDisconnected(name: ComponentName?) {
@@ -125,6 +128,18 @@ class MachineClient(private val context: Context) {
     fun clearFinished(cb: ((Verdict) -> Unit)? = null) = sendRaw(Ipc.CLEAR, null, cb)
     /** [auto] : tare faite par Toque (recette), qui n'apprend jamais le poids du bol vide. */
     fun tare(auto: Boolean = false) = sendRaw(Ipc.TARE, if (auto) Bundle().apply { putBoolean("auto", true) } else null, null)
+    private var lastRecipe: RecipeProgress? = null
+
+    /**
+     * Étape de la recette guidée affichée (null : plus de recette), pour la domotique. Envoyé seulement
+     * quand elle change ; purement informatif, le service n'en tire aucune commande.
+     */
+    fun reportRecipe(r: RecipeProgress?) {
+        if (r == lastRecipe) return
+        lastRecipe = r
+        sendRaw(Ipc.RECIPE, Ipc.recipeToBundle(r), null)
+    }
+
     fun forgetEmptyBowl() = sendRaw(Ipc.FORGET_BOWL, null, null)
     fun acknowledge(cb: (Verdict) -> Unit) = sendRaw(Ipc.ACK_FAULT, null, cb)
     fun turboDown(accessory: Accessory, cb: (Verdict) -> Unit) =

@@ -50,13 +50,14 @@ class RecipesScreen(
     private val favorites: Boolean = false,
     initialUsage: Usage = Usage.NONE,
 ) : Screen(a) {
-    /** Listes tirées des cuissons : dernières recettes cuisinées, ou les plus cuisinées. */
-    enum class Usage { NONE, RECENT, MOST }
+    /** Listes ordonnées : dernières recettes cuisinées, les plus cuisinées, ou celles prévues cette semaine. */
+    enum class Usage { NONE, RECENT, MOST, WEEK }
 
     override val title = when {
         favorites -> tr("Favoris")
         initialUsage == Usage.RECENT -> tr("Récentes")
         initialUsage == Usage.MOST -> tr("Fréquentes")
+        initialUsage == Usage.WEEK -> tr("Cette semaine")
         else -> tr("Recettes")
     }
 
@@ -71,6 +72,7 @@ class RecipesScreen(
     private var selection = when {
         initialUsage == Usage.RECENT -> ChipSelection.of(RecipeChip.RECENT)
         initialUsage == Usage.MOST -> ChipSelection.of(RecipeChip.FREQUENT)
+        initialUsage == Usage.WEEK -> ChipSelection.of(RecipeChip.WEEK)
         favorites -> ChipSelection.of(RecipeChip.FAVORITES)
         else -> kept.selection
     }
@@ -90,6 +92,8 @@ class RecipesScreen(
     private lateinit var empty: LinearLayout
     private lateinit var emptyText: TextView
     private var refreshBtn: View? = null
+    /** « Vider la semaine » : visible sur la pastille « Cette semaine » quand des recettes y sont prévues. */
+    private lateinit var clearWeekBtn: View
     private val adapter = Adapter()
     private var unsub: (() -> Unit)? = null
     private val runSearch = Runnable { search() }
@@ -144,6 +148,9 @@ class RecipesScreen(
             refreshBtn = Ui.button(c, tr("Actualiser"), Ui.Style.SECONDARY, Icon.Kind.SYNC, height = 64, textSize = 18f) { refreshFavorites() }
                 .also { bar.addView(it, Ui.lp(Ui.WRAP, Ui.WRAP, l = 16)) }
         }
+        clearWeekBtn = Ui.button(c, tr("Vider la semaine"), Ui.Style.SECONDARY, Icon.Kind.TRASH, height = 64, textSize = 18f) { askClearWeek() }
+        clearWeekBtn.visibility = View.GONE
+        bar.addView(clearWeekBtn, Ui.lp(Ui.WRAP, Ui.WRAP, l = 16))
         bar.addView(Ui.button(c, tr("Nouvelle recette"), Ui.Style.SECONDARY, Icon.Kind.PLUS, height = 64, textSize = 18f) {
             a.hideKeyboard()
             a.push(RecipeEditScreen(a, UserRecipes.blank(), isNew = true))
@@ -281,19 +288,33 @@ class RecipesScreen(
     private fun buildChips() {
         val before = chips.childCount
         chips.removeAllViews()
-        for (ch in selection.chips(a.app.recipes.index)) {
+        val repo = a.app.recipes
+        for (ch in selection.chips(repo.index, repo.weekCount > 0)) {
             chips.addView(Ui.toggleChip(c, ch.label, selection.isOn(ch)) { tapChip(ch) }, Ui.lp(Ui.WRAP, Ui.WRAP, r = 10))
         }
         // Pastilles ajoutées ou retirées (catalogue chargé) : le cadre repart de zéro ; sinon il reste sur la sienne.
         if (chips.childCount != before && knob.index >= 0) knob.reset()
         else if (knob.shown && knob.index < chips.childCount) KnobFocus.frame(chips.getChildAt(knob.index), true, 40f)
+        clearWeekBtn.visibility = if (selection.usage == RecipeChip.Kind.WEEK && repo.weekCount > 0) View.VISIBLE else View.GONE
         refreshSort()
+    }
+
+    /** Vide « Cette semaine » après confirmation (les recettes restent dans Mes recettes). */
+    private fun askClearWeek() {
+        a.hideKeyboard()
+        a.confirm(tr("Vider la semaine"),
+            tr("Retirer toutes les recettes de « Cette semaine » ? Elles restent dans Mes recettes."),
+            tr("Vider"), icon = Icon.Kind.TRASH) {
+            a.app.recipes.clearWeek()
+            a.toast(tr("Semaine vidée"))
+        }
     }
 
     /** Une pastille allumée hors de vue (catégorie gardée de la dernière fois) est amenée à l'écran. */
     private fun showLitChip() {
         chipScroller.post {
-            val lit = selection.chips(a.app.recipes.index).indexOfLast { selection.isOn(it) }
+            val repo = a.app.recipes
+            val lit = selection.chips(repo.index, repo.weekCount > 0).indexOfLast { selection.isOn(it) }
             val chip = chips.getChildAt(lit) ?: return@post
             val right = chip.right + Ui.u(24) - chipScroller.width
             if (right > chipScroller.scrollX) chipScroller.scrollTo(right, 0)
@@ -317,7 +338,7 @@ class RecipesScreen(
         val loaded = repo.loaded
         refreshSort()
         searchExec.execute {
-            val hits = sel.select(index, q, order, { repo.recentIds() }, { repo.mostCookedIds() })
+            val hits = sel.select(index, q, order, { repo.recentIds() }, { repo.mostCookedIds() }, { repo.weekIds() })
             view.post {
                 if (gen != generation) return@post
                 // Autre liste : un cadre posé sur une recette repart de la première visible. La même
@@ -353,6 +374,8 @@ class RecipesScreen(
                 tr("Les recettes Lidl apparaîtront après la première synchronisation.\nRéglages › Recettes › Lidl › Synchroniser.")
             none -> tr("Les recettes Lidl apparaîtront après la première synchronisation, une fois Toque installé sur le robot.")
             waitingFull -> tr("Recherche dans les ingrédients…")
+            selection.usage == RecipeChip.Kind.WEEK && query.isBlank() ->
+                tr("Aucune recette prévue cette semaine.\nPartagez une recette Jow vers Toque depuis le téléphone, ou collez plusieurs liens sur la page d'import du robot.")
             selection.byUsage && query.isBlank() -> tr("Aucune recette cuisinée pour l'instant.\nLes recettes apparaissent ici dès leur première cuisson.")
             selection == ChipSelection.of(RecipeChip.FAVORITES) && query.isBlank() -> tr("Aucun favori pour l'instant.\nTouchez l'étoile d'une recette pour l'ajouter.")
             selection == ChipSelection.of(RecipeChip.COMMUNITY) && query.isBlank() ->
@@ -443,7 +466,7 @@ class RecipesScreen(
         }
         override fun activate(i: Int) {
             when {
-                i < chipCount -> (selection.chips(a.app.recipes.index).getOrNull(i))?.let { tapChip(it) }
+                i < chipCount -> (selection.chips(a.app.recipes.index, a.app.recipes.weekCount > 0).getOrNull(i))?.let { tapChip(it) }
                 i == sortSlot -> openSort(byKnob = true)
                 else -> open(i - sortSlot - 1)
             }

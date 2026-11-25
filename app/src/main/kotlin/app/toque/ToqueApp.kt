@@ -80,6 +80,8 @@ open class ToqueApp : Application() {
     /** Tâches de fond réseau (heure). Les essais d'interface (Robolectric) n'en lancent aucune. */
     protected open fun startBackground() {
         TimeSync.start(this, prefs, log)
+        // Recettes Cookomix envoyées depuis le téléphone (si activé dans Réglages › Mes recettes).
+        app.toque.recipes.CookomixInbox.apply(this)
     }
 
     /** Réglage du compagnon avant son démarrage (essais : port libre sur la boucle locale). */

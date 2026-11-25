@@ -20,8 +20,52 @@ import kotlin.math.roundToLong
  * - de moitié au double de la recette seulement : au-delà, la cuisson n'a plus grand-chose à voir.
  */
 object Portions {
-    /** Liquide au maximum dans le bol (notice du SKMC 1200, à vitesse 10). */
+    /**
+     * Liquide au maximum dans le bol à la vitesse 10 et en Turbo (notices SKMC 1200 B2 p. 12 et
+     * SKMC 1100 A1 p. 15 : « il ne peut y avoir plus de 2,5 litres de liquide au maximum »).
+     */
     const val BOWL_MAX_G = 2500
+
+    /** Contenance maximale du bol, repère III (SKMC 1100 A1 p. 15 et 44 ; SKMC 1200 B2 p. 12) : 3 litres. */
+    const val BOWL_CAPACITY_G = 3000
+
+    /** Pétrissage : 500 g de farine au plus pour une pâte lourde, 600 g pour une pâte légère (mêmes notices). */
+    const val KNEAD_MAX_FLOUR_G = 500
+
+    /**
+     * Nombre de personnes à appliquer à une recette importée pour [base] personnes quand on en veut
+     * [wanted] : [wanted] ramené dans [range] (de la moitié au double). 0 : rien à changer.
+     */
+    fun importServings(base: Int, wanted: Int): Int {
+        if (base <= 0 || wanted <= 0) return 0
+        val r = range(base)
+        val n = wanted.coerceIn(r.first, r.last)
+        return if (n == base) 0 else n
+    }
+
+    /** Ce que la notice du robot interdit de mettre dans le bol, pour la recette telle qu'affichée. */
+    class BowlLoad(val grams: Int, val flourKneaded: Int) {
+        /** Plus que la contenance du bol (3 l) : à faire en deux fois. */
+        val overCapacity: Boolean get() = grams > BOWL_CAPACITY_G
+        /** Plus de 2,5 l : pas de vitesse 10 ni de Turbo. */
+        val overFastLimit: Boolean get() = grams > BOWL_MAX_G
+        /** Plus de 500 g de farine à pétrir. */
+        val overKnead: Boolean get() = flourKneaded > KNEAD_MAX_FLOUR_G
+    }
+
+    /**
+     * Estimation (ml comptés comme g, ce qui sous-estime le volume des farines et légumes en morceaux) :
+     * le total pesé ou mesuré, et la farine quand une étape pétrit.
+     */
+    fun bowlLoad(r: Recipe): BowlLoad {
+        val kneads = r.steps.any { it.machine?.program == StepProgram.KNEAD }
+        val flour = if (!kneads) 0.0 else r.allIngredients.sumOf { i ->
+            if (!QuantityLinks.norm(i.name).startsWith("farine")) return@sumOf 0.0
+            val q = QuantityLinks.parse(i.qty) ?: return@sumOf 0.0
+            METRIC[i.unit.trim().lowercase()]?.let { q * it } ?: 0.0
+        }
+        return BowlLoad(totalGrams(r), flour.roundToLong().toInt())
+    }
 
     /** « 4 pers. », ou « 6 pots » quand la recette ne compte pas des personnes ([unit]). */
     fun label(n: Int, unit: String): String = if (unit.isBlank()) tr("%d pers.", n) else "$n $unit"

@@ -1,0 +1,33 @@
+# Compile l'APK « Toque + domotique » sur la branche home-assistant, sans rien publier :
+# l'APK est à télécharger dans l'onglet Actions (artefact), puis à installer à la main par adb.
+name: Build APK (home-assistant)
+
+on:
+  push:
+    branches: [home-assistant, cookomix-inbox, toque-combo, toque-combo-082, toque-combo-090, toque-combo-091]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Tests and build (Connect)
+        run: ./gradlew --no-daemon :core:test :app:assembleRelease
+      - name: Checksum
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk Toque-${{ github.ref_name }}.apk
+          sha256sum Toque-${{ github.ref_name }}.apk | tee Toque-${{ github.ref_name }}.apk.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Toque-${{ github.ref_name }}
+          path: |
+            Toque-${{ github.ref_name }}.apk
+            Toque-${{ github.ref_name }}.apk.sha256

@@ -11,6 +11,7 @@ import app.toque.core.machine.Setting
 import app.toque.core.machine.Snapshot
 import app.toque.core.machine.Verdict
 import app.toque.core.machine.Violation
+import app.toque.core.net.RecipeProgress
 import app.toque.core.protocol.Direction
 import app.toque.core.protocol.Operation
 import app.toque.core.protocol.SmartProgram
@@ -35,6 +36,8 @@ object Ipc {
     const val SIM = 23
     const val CONFIRM_COLD = 24
     const val FORGET_BOWL = 25
+    /** Interface → service : étape de la recette guidée, pour le serveur d'état. Aucun effet sur la machine. */
+    const val RECIPE = 26
 
     /** Clé de la langue de l'interface, jointe à chaque commande. */
     const val LANG = "lang"
@@ -58,6 +61,26 @@ object Ipc {
         val m = HashMap<String, Any?>()
         for (k in b.keySet()) m[k] = b.get(k)
         return Snapshot.fromMap(m)
+    }
+
+    /** Recette guidée ; un Bundle vide (sans titre) dit « plus de recette affichée ». */
+    fun recipeToBundle(r: RecipeProgress?): Bundle {
+        val b = Bundle()
+        if (r == null) return b
+        for ((k, v) in r.toMap()) when (v) {
+            is String -> b.putString(k, v)
+            is Int -> b.putInt(k, v)
+            is Long -> b.putLong(k, v)
+            is Boolean -> b.putBoolean(k, v)
+            is List<*> -> b.putStringArrayList(k, ArrayList(v.filterIsInstance<String>()))
+        }
+        return b
+    }
+
+    fun bundleToRecipe(b: Bundle): RecipeProgress? {
+        val m = HashMap<String, Any?>()
+        for (k in b.keySet()) if (k != LANG) m[k] = b.get(k)
+        return RecipeProgress.fromMap(m)
     }
 
     fun jobToBundle(j: JobSpec): Bundle {

@@ -31,6 +31,8 @@ class HomeScreen(a: MainActivity) : Screen(a) {
     private lateinit var greeting: TextView
     private lateinit var recipesSub: TextView
     private lateinit var favSub: TextView
+    /** Raccourci « Semaine » : seulement quand des recettes sont prévues cette semaine. */
+    private lateinit var weekBtn: View
     private lateinit var settingsSub: TextView
     private lateinit var resumeCard: LinearLayout
     private lateinit var resumeText: TextView
@@ -98,6 +100,11 @@ class HomeScreen(a: MainActivity) : Screen(a) {
             a.push(RecipesScreen(a, initialUsage = RecipesScreen.Usage.MOST))
         }
         shortcuts.addView(most, LinearLayout.LayoutParams(0, Ui.WRAP, 1f))
+        weekBtn = Ui.button(c, tr("Semaine"), Ui.Style.SECONDARY, Icon.Kind.BOOK, height = 56, textSize = 18f) {
+            a.push(RecipesScreen(a, initialUsage = RecipesScreen.Usage.WEEK))
+        }
+        weekBtn.visibility = View.GONE
+        shortcuts.addView(weekBtn, LinearLayout.LayoutParams(0, Ui.WRAP, 1f).apply { leftMargin = Ui.u(12) })
         left.addView(shortcuts, Ui.lp(Ui.MATCH, Ui.WRAP, t = 14))
 
         // Recette envoyée par un téléphone : elle attend ici, rien ne démarre.
@@ -126,6 +133,7 @@ class HomeScreen(a: MainActivity) : Screen(a) {
         knobTargets += search to 36f
         knobTargets += recent to 28f
         knobTargets += most to 28f
+        knobTargets += weekBtn to 28f
         knobTargets += receivedCard to 24f
         knobTargets += resumeCard to 24f
         left.addView(resumeCard, Ui.lp(Ui.MATCH, Ui.WRAP, t = 16))
@@ -321,6 +329,8 @@ class HomeScreen(a: MainActivity) : Screen(a) {
             favs == 1 -> tr("1 favori")
             else -> tr("%d favoris", favs)
         }
+        // La molette saute le raccourci quand il est caché (voir HomeKnob.usable).
+        weekBtn.visibility = if (repo.weekCount > 0) View.VISIBLE else View.GONE
         searchHint.text = if (repo.loaded) tr("Rechercher une recette…") else tr("Catalogue en préparation…")
         knobChip.visibility = if (a.prefs.knobReady) View.GONE else View.VISIBLE
         val update = a.updates.available

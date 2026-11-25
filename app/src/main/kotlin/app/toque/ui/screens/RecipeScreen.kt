@@ -349,11 +349,18 @@ class RecipeScreen(a: MainActivity, val recipe: Recipe) : Screen(a) {
             people(shown.servings), people(recipe.servings)), 15f, Ui.TEXT).apply { setLineSpacing(0f, 1.12f) })
         box.addView(Ui.text(c, tr("Certaines recettes s'adaptent mal (vapeur, pâtes à pétrir, pâtisserie)."), 15f, Ui.WARN)
             .apply { setLineSpacing(0f, 1.12f) }, Ui.lp(t = 6))
-        val total = Portions.totalGrams(shown)
-        if (shown.servings > recipe.servings && total > Portions.BOWL_MAX_G) {
-            box.addView(Ui.text(c, tr("Environ %s kg d'ingrédients : vérifiez que le bol n'est pas trop rempli (2,5 L de liquide au maximum) ou cuisinez en deux fois.",
-                String.format(I18n.locale, "%.1f", total / 1000.0)), 15f, Ui.WARN).apply { setLineSpacing(0f, 1.12f) }, Ui.lp(t = 6))
+        // Limites de la notice (SKMC 1100 A1 et 1200) : 3 l au repère III, 2,5 l de liquide à la vitesse 10
+        // et en Turbo, 500 g de farine pour une pâte lourde.
+        val load = Portions.bowlLoad(shown)
+        val kg = String.format(I18n.locale, "%.1f", load.grams / 1000.0)
+        val warn = when {
+            load.overCapacity -> tr("Environ %s kg d'ingrédients : plus que la contenance du bol (3 L, repère III). Cuisinez en deux fois.", kg)
+            load.overFastLimit -> tr("Environ %s kg d'ingrédients : vérifiez que le bol n'est pas trop rempli (2,5 L de liquide au maximum) ou cuisinez en deux fois.", kg)
+            else -> null
         }
+        if (warn != null) box.addView(Ui.text(c, warn, 15f, Ui.WARN).apply { setLineSpacing(0f, 1.12f) }, Ui.lp(t = 6))
+        if (load.overKnead) box.addView(Ui.text(c, tr("%d g de farine à pétrir : le robot en pétrit 500 g au plus pour une pâte lourde, 600 g pour une pâte légère.", load.flourKneaded),
+            15f, Ui.WARN).apply { setLineSpacing(0f, 1.12f) }, Ui.lp(t = 6))
         box.addView(Ui.button(c, tr("Revenir à %s", people(recipe.servings)), Ui.Style.GHOST, height = 44, textSize = 15f) {
             save(adjustments.withServings(recipe.servings, recipe.servings))
         }, Ui.lp(Ui.WRAP, Ui.WRAP, t = 8))
