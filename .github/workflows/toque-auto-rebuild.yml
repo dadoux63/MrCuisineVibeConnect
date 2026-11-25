@@ -8,8 +8,12 @@
 name: Reconstruire Toque sur la dernière version amont
 
 on:
+  # GitHub retarde ou abandonne parfois une exécution planifiée (charge, enregistrement du cron) :
+  # le 25/11/2026, celle de 05:17 UTC n'a jamais eu lieu. Deux passages par jour ; le second ne
+  # fait rien si la branche existe déjà (statut up-to-date), et une issue n'est jamais dupliquée.
   schedule:
-    - cron: "17 5 * * *" # tous les jours vers 05:17 UTC
+    - cron: "17 5 * * *" # tous les jours vers 05:17 UTC (6 h 17 / 7 h 17 à Paris)
+    - cron: "43 16 * * *" # rattrapage vers 16:43 UTC
   workflow_dispatch:
     inputs:
       target_tag:
