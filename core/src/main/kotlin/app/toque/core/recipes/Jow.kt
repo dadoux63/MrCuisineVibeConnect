@@ -112,7 +112,10 @@ object Jow {
     private val LIQUIDE_EAU = Regex("^(eau|lait|bouillon|creme)\\b")
     private val LIQUIDE_TEXTE = Regex("(\\d{1,3}(?:[\\u00a0\\u202f ]\\d{3})+|\\d+(?:[.,]\\d+)?)\\s*(ml|cl|l)\\s+(?:d['’]\\s?|de\\s+(?:la\\s+)?)(eau|lait|bouillon|creme(?: liquide| fraiche| entiere)?)\\b")
     /** Étape qui n'emploie qu'une partie d'un ingrédient : sa quantité totale ne se pèse pas ici. */
-    private val PARTIEL = Regex("\\b(moitie|reste|restante?s?|une partie|un peu|quelques)\\b")
+    private val PARTIEL = Regex("\\b(moitie|reste|restante?s?|une partie|un peu|quelques|reservez-en|gardez-en)\\b")
+    /** Partie d'un ingrédient préparé plus tôt (« réservez-en pour le service ») : « un peu d'huile » n'en est pas une. */
+    private val PARTIEL_NET = Regex("\\b(moitie|une partie|reservez-en|gardez-en)\\b")
+    private val MELANGE_A_PART = Regex("\\b(saladier|plat|assiette|ramequin|moule|melangez|melanger)\\b")
 
     /** Poids (g) de la quantité Jow pour [couverts], ou null si elle ne se pèse pas (pièces, cuillères…). */
     internal fun poids(parCouvert: Double, uniteJow: String, couverts: Int, nomSansAccents: String): Int? {
@@ -136,9 +139,13 @@ object Jow {
      * qu'une fois, et jamais à une étape qui n'en prend qu'une partie. Rien hors du robot.
      */
     private fun avecPesees(produites: List<Map<String, Any?>>, brut: String, ingredients: List<Pair<String, Pesee>>,
-                           dejaPeses: MutableSet<String>, e: Etat): List<Map<String, Any?>> {
+                           dejaPeses: MutableSet<String>, e: Etat, enAttente: List<Pair<String, Pesee>> = emptyList()): List<Map<String, Any?>> {
         if (produites.none { it["machine"] != null }) return produites
-        val partiel = PARTIEL.containsMatchIn(sa(brut))
+        // Ingrédients d'étapes précédentes faites hors robot (« Coupez les carottes… ») : pesés quand une
+        // étape au robot les met dans le bol (hachis différé « Mettre dans le bol : 450 g Carotte… »).
+        val t = sa(brut)
+        val candidats = (if (PARTIEL_NET.containsMatchIn(t)) emptyList() else enAttente) +
+            (if (PARTIEL.containsMatchIn(t)) emptyList() else ingredients)
         val base = e.etapes.size
         val hachis = e.hachis
         val out = ArrayList<Map<String, Any?>>()
@@ -149,7 +156,7 @@ object Jow {
                 // « Égoutter … et remettre dans le bol » : rien ne se verse dans le bol avant d'avoir égoutté.
                 if (Regex("\\begoutt").containsMatchIn(cible)) { out += st; continue }
                 // Un ingrédient de l'étape Jow va dans la première étape au robot qui le nomme (« Avec : … » ou le texte).
-                if (!partiel) for ((id, p) in ingredients) {
+                for ((id, p) in candidats) {
                     if (id in dejaPeses) continue
                     val mot = sa(p.nom).split(' ', '(', ',', '\'').firstOrNull { it.length >= 3 } ?: continue
                     if (!Regex("\\b" + Regex.escape(mot)).containsMatchIn(cible)) continue
@@ -623,6 +630,7 @@ object Jow {
         /** Ingrédients qui se pèsent (g, ou ml d'un liquide proche de l'eau), par identifiant Jow. */
         val pesables = HashMap<String, Pesee>()
         val dejaPeses = HashSet<String>()
+        val enAttente = LinkedHashSet<String>()
         var eau: Double? = null
         var pates: Double? = null
         fun ligne(c: Map<String, Any?>, nom: String): Map<String, Any?> {
@@ -685,7 +693,11 @@ object Jow {
             val impliques = d["involvedIngredients"].list().mapNotNull { parId[it.obj().str("id")] }.joinToString(", ")
             val ids = d["involvedIngredients"].list().mapNotNull { it.obj().str("id") }
             val produites = etape(label, impliques, e, etapes.size + 1)
-            etapes += avecPesees(produites, label, ids.filter { it !in dejaPeses }.mapNotNull { id -> pesables[id]?.let { id to it } }, dejaPeses, e)
+            val attente = enAttente.filter { it !in dejaPeses && it !in ids }.mapNotNull { id -> pesables[id]?.let { id to it } }
+            etapes += avecPesees(produites, label, ids.filter { it !in dejaPeses }.mapNotNull { id -> pesables[id]?.let { id to it } }, dejaPeses, e, attente)
+            // Ce qui n'a pas été pesé à cette étape peut l'être à une étape au robot suivante (hachis différé).
+            // Pas ce qui est mélangé à part (« Dans un saladier, mélangez le thon… ») : ce n'est plus l'ingrédient seul.
+            if (produites.none { it["machine"] != null } && !MELANGE_A_PART.containsMatchIn(sa(label))) enAttente += ids.filter { it !in dejaPeses }
         }
         if (e.aHacher.isNotEmpty()) {
             // Légumes jamais cuits au bol : à couper au couteau, comme Jow l'écrit.

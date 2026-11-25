@@ -89,8 +89,9 @@ class JowTest {
         assertEquals(listOf(0, 120, 100, 90, 100), m.map { it["tempC"] })
         assertEquals(listOf(4, 1, 1, 1, 1), m.map { it["speed"] })
         assertEquals(listOf(false, true, true, true, true), m.map { it["reverse"] })
-        assertTrue((s[2]["text"] as String).startsWith("Mettre dans le bol : 1 Oignon, 300 g Carotte"))
-        assertTrue((s[3]["text"] as String).startsWith("Laisser le hachis dans le bol."))
+        val hachis = s.indexOfFirst { (it["text"] as String).startsWith("Mettre dans le bol : 1 Oignon, 300 g Carotte") }
+        assertEquals(300, (s[hachis - 1]["weigh"] as Map<*, *>)["grams"]) // carottes pesées avant le hachis
+        assertTrue((s[hachis + 1]["text"] as String).startsWith("Laisser le hachis dans le bol."))
         assertTrue(s.any { (it["text"] as String).contains("600 ml d'eau") })
         assertTrue(s.first { (it["text"] as String).contains("effiloch") }["machine"] == null)
         assertEquals("https://static.jow.fr/550x550/recipes/EssaiSoupe.png", r.photoUrl)
@@ -101,16 +102,17 @@ class JowTest {
     @Test fun liquidsAndGramsAreWeighedBeforeTheRobotStep() {
         val s = steps(Jow.convertitPage(page("essai-soupe"), "", 3, "2026-11-23"))
         val pesees = s.filter { it["weigh"] != null }
-        // « Versez 200ml d'eau par personne » → 600 ml pour 3 ; crème liquide 50 ml × 3 ; rien pour les pièces.
-        assertEquals(listOf(600, 150), pesees.map { (it["weigh"] as Map<*, *>)["grams"] })
-        assertEquals(listOf("eau", "crème liquide"), pesees.map { (it["weigh"] as Map<*, *>)["label"] })
+        // Carottes coupées hors robot puis hachées (hachis différé) ; « Versez 200ml d'eau par personne » → 600 ml
+        // pour 3 ; crème liquide 50 ml × 3 ; rien pour les pièces.
+        assertEquals(listOf(300, 600, 150), pesees.map { (it["weigh"] as Map<*, *>)["grams"] })
+        assertEquals(listOf("carotte", "eau", "crème liquide"), pesees.map { (it["weigh"] as Map<*, *>)["label"] })
         for (p in pesees) {
             assertTrue(p["machine"] == null)
             assertTrue(s[s.indexOf(p) + 1]["machine"] != null) // juste avant l'étape au robot
         }
-        assertEquals("Pour l'étape suivante, pesez dans le bol : 600 ml d'eau (600 g sur la balance).", pesees[0]["text"])
+        assertEquals("Pour l'étape suivante, pesez dans le bol : 600 ml d'eau (600 g sur la balance).", pesees[1]["text"])
         val recipe = UserRecipes.imported(RecipeCodec.fromMap(Jow.convertitPage(page("essai-soupe"), "", 3, "2026-11-23").recipe, RecipeSource.USER)!!)
-        assertEquals(listOf(600, 150), recipe.steps.mapNotNull { it.weigh?.grams })
+        assertEquals(listOf(300, 600, 150), recipe.steps.mapNotNull { it.weigh?.grams })
     }
 
     @Test fun nothingIsWeighedOutsideTheRobotOrForAPart() {
@@ -118,7 +120,7 @@ class JowTest {
         for (p in g.filter { it["weigh"] != null }) assertTrue(g[g.indexOf(p) + 1]["machine"] != null)
         val html = page("essai-soupe").replace("Remettez le poulet effiloché avec la crème.", "Remettez le poulet effiloché avec la moitié de la crème.")
         val s = steps(Jow.convertitPage(html, "", 3, "2026-11-23"))
-        assertEquals(listOf(600), s.mapNotNull { (it["weigh"] as Map<*, *>?)?.get("grams") })
+        assertEquals(listOf(300, 600), s.mapNotNull { (it["weigh"] as Map<*, *>?)?.get("grams") })
     }
 
     @Test fun ovenFryingAndSlicingStayManual() {
