@@ -329,11 +329,12 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         counter.text = tr("ÉTAPE %d SUR %d", index + 1, n)
         text.text = step.text.ifBlank { step.machine?.summary ?: "" }
         val w = step.weigh
-        weighBox.visibility = if (w != null) View.VISIBLE else View.GONE
         if (w != null) {
             weighLabel.text = (if (w.originalGrams > 0) tr("Pesez %d g (recette : %d g)", w.grams, w.originalGrams) else tr("Pesez %d g", w.grams)) +
                 if (w.label.isNotBlank()) " · ${w.label}" else ""
-        }
+        } else weighLabel.text = tr("Balance")
+        weighBar.visibility = if (w != null) View.VISIBLE else View.GONE
+        showWeighBox(a.snapshot)
         ingredientsBtn.visibility = if (step.machine != null && IngredientsCard.has(recipe)) View.VISIBLE else View.INVISIBLE
         Ui.setButtonEnabled(prevBtn, index > 0)
         nextLabel.text = if (index == n - 1) tr("Terminer") else tr("Suivant")
@@ -771,8 +772,21 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         publish()
     }
 
+    /**
+     * Bloc balance : toujours sur une étape de pesée ; sur les autres étapes, en version compacte
+     * (poids et Tare, sans cible) pour peser ce qu'on ajoute, mais pas pendant un programme.
+     */
+    private fun showWeighBox(s: Snapshot) {
+        val step = recipe.steps.getOrNull(index)
+        val show = step != null && (step.weigh != null || (a.prefs.scaleOnAllSteps && !s.busy))
+        val v = if (show) View.VISIBLE else View.GONE
+        if (weighBox.visibility != v) weighBox.visibility = v
+    }
+
     private fun showSnapshot(s: Snapshot) {
         val w = recipe.steps.getOrNull(index)?.weigh
+        showWeighBox(s)
+        if (w == null && weighBox.visibility == View.VISIBLE) weighValue.text = if (s.hasSample) "${s.weightG} g" else "—"
         if (w != null) {
             weighValue.text = if (s.hasSample) "${s.weightG} g" else "—"
             weighBar.progress = if (w.grams > 0) s.weightG.toFloat() / w.grams else 0f

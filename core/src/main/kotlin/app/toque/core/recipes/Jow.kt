@@ -104,6 +104,80 @@ object Jow {
         else -> null
     }
 
+    // --- Pesées ----------------------------------------------------------------------------------
+    /** Ce qui se pèse avant une étape au robot : [nom] pour la balance, [quantite] telle qu'écrite (« 600 ml »). */
+    internal data class Pesee(val nom: String, val quantite: String, val grammes: Int)
+
+    /** Liquides assez proches de l'eau pour peser 1 ml = 1 g (à quelques % près). */
+    private val LIQUIDE_EAU = Regex("^(eau|lait|bouillon|creme)\\b")
+    private val LIQUIDE_TEXTE = Regex("(\\d{1,3}(?:[\\u00a0\\u202f ]\\d{3})+|\\d+(?:[.,]\\d+)?)\\s*(ml|cl|l)\\s+(?:d['’]\\s?|de\\s+(?:la\\s+)?)(eau|lait|bouillon|creme(?: liquide| fraiche| entiere)?)\\b")
+    /** Étape qui n'emploie qu'une partie d'un ingrédient : sa quantité totale ne se pèse pas ici. */
+    private val PARTIEL = Regex("\\b(moitie|reste|restante?s?|une partie|un peu|quelques)\\b")
+
+    /** Poids (g) de la quantité Jow pour [couverts], ou null si elle ne se pèse pas (pièces, cuillères…). */
+    internal fun poids(parCouvert: Double, uniteJow: String, couverts: Int, nomSansAccents: String): Int? {
+        val total = parCouvert * couverts
+        val g = when (uniteJow.trim().lowercase()) {
+            "gramme" -> total
+            "kilogramme" -> total * 1000
+            "millilitre" -> if (LIQUIDE_EAU.containsMatchIn(nomSansAccents)) total else null
+            "centilitre" -> if (LIQUIDE_EAU.containsMatchIn(nomSansAccents)) total * 10 else null
+            "litre" -> if (LIQUIDE_EAU.containsMatchIn(nomSansAccents)) total * 1000 else null
+            else -> null
+        } ?: return null
+        val r = Math.rint(g).toInt()
+        return if (r >= 5) r else null
+    }
+
+    /**
+     * Ajoute, juste avant l'étape au robot produite pour une étape Jow, une étape de pesée par ingrédient
+     * versé dans le bol : ingrédients en g, et liquides (eau, lait, bouillon, crème) en ml, lus dans les
+     * ingrédients de l'étape ou dans son texte (« Ajoutez 600 ml d'eau »). Chaque ingrédient n'est pesé
+     * qu'une fois, et jamais à une étape qui n'en prend qu'une partie. Rien hors du robot.
+     */
+    private fun avecPesees(produites: List<Map<String, Any?>>, brut: String, ingredients: List<Pair<String, Pesee>>,
+                           dejaPeses: MutableSet<String>, e: Etat): List<Map<String, Any?>> {
+        if (produites.none { it["machine"] != null }) return produites
+        val partiel = PARTIEL.containsMatchIn(sa(brut))
+        val base = e.etapes.size
+        val hachis = e.hachis
+        val out = ArrayList<Map<String, Any?>>()
+        for ((i, st) in produites.withIndex()) {
+            if (st["machine"] != null) {
+                val cible = sa(st["text"] as? String ?: "")
+                val liste = ArrayList<Pesee>()
+                // « Égoutter … et remettre dans le bol » : rien ne se verse dans le bol avant d'avoir égoutté.
+                if (Regex("\\begoutt").containsMatchIn(cible)) { out += st; continue }
+                // Un ingrédient de l'étape Jow va dans la première étape au robot qui le nomme (« Avec : … » ou le texte).
+                if (!partiel) for ((id, p) in ingredients) {
+                    if (id in dejaPeses) continue
+                    val mot = sa(p.nom).split(' ', '(', ',', '\'').firstOrNull { it.length >= 3 } ?: continue
+                    if (!Regex("\\b" + Regex.escape(mot)).containsMatchIn(cible)) continue
+                    liste += p
+                    dejaPeses += id
+                }
+                for (m in LIQUIDE_TEXTE.findAll(cible)) {
+                    val v = m.groupValues[1].replace(Regex("[\\u00a0\\u202f ]"), "").replace(',', '.').toDoubleOrNull() ?: continue
+                    val ml = when (m.groupValues[2]) { "l" -> v * 1000; "cl" -> v * 10; else -> v }
+                    val nom = m.groupValues[3]
+                    if (ml < 5 || liste.any { sa(it.nom).startsWith(nom.split(' ').first()) }) continue
+                    val q = Math.rint(ml).toInt()
+                    liste += Pesee(nom.replaceFirst("creme", "crème"), "$q ml", q)
+                }
+                for (p in liste) {
+                    val de = if (Regex("^[aeiouyh]").containsMatchIn(sa(p.nom))) "d'" else "de "
+                    val t = "Pour l'étape suivante, pesez dans le bol : ${p.quantite} $de${p.nom}" +
+                        (if (p.quantite.endsWith(" ml")) " (${p.grammes} g sur la balance)." else ".")
+                    out += linkedMapOf<String, Any?>("text" to t, "weigh" to linkedMapOf("label" to p.nom.take(60), "grams" to p.grammes))
+                }
+                // Le hachis gardé dans le bol est repéré par sa place : elle bouge si des pesées passent devant.
+                if (liste.isNotEmpty() && hachis >= base + i) e.hachis += liste.size
+            }
+            out += st
+        }
+        return out
+    }
+
     // --- Étapes ----------------------------------------------------------------------------------
     private class Etat(val couverts: Int, val eau: Double?, val pates: Double?, val etapes: MutableList<Map<String, Any?>>,
                        val soupe: Boolean = false, val auDressage: String = "") {
@@ -546,6 +620,9 @@ object Jow {
 
         // Ingrédients (et ceux « du placard » : huile, beurre, eau…).
         val parId = HashMap<String, String>()
+        /** Ingrédients qui se pèsent (g, ou ml d'un liquide proche de l'eau), par identifiant Jow. */
+        val pesables = HashMap<String, Pesee>()
+        val dejaPeses = HashSet<String>()
         var eau: Double? = null
         var pates: Double? = null
         fun ligne(c: Map<String, Any?>, nom: String): Map<String, Any?> {
@@ -556,7 +633,10 @@ object Jow {
             if (nomS == "eau") eau = grammes(q, unite, n)
             if (Regex("\\b(pates|tagliatelle|spaghetti|penne|fusilli|coquillettes|riz|pommes de terre|gnocchi)\\b").containsMatchIn(nomS)) pates = grammes(q, unite, n)
             val note = if (c["isOptional"] == true) "facultatif" else ""
-            (c.str("id") ?: c["ingredient"].obj().str("id"))?.let { parId[it] = listOf(qty, u, nom).filter { it.isNotEmpty() }.joinToString(" ") }
+            (c.str("id") ?: c["ingredient"].obj().str("id"))?.let { id ->
+                parId[id] = listOf(qty, u, nom).filter { it.isNotEmpty() }.joinToString(" ")
+                poids(q, unite, n, nomS)?.let { g -> pesables[id] = Pesee(nom.lowercase(), listOf(qty, u).filter { it.isNotEmpty() }.joinToString(" "), g) }
+            }
             return linkedMapOf("qty" to qty, "unit" to u, "name" to nom, "note" to note)
         }
         val principaux = r["constituents"].list().map { it.obj() }.map { ligne(it, (it.str("name") ?: "").trim()) }
@@ -603,7 +683,9 @@ object Jow {
             val label = (d.str("label") ?: "").trim()
             if (label.isEmpty()) continue
             val impliques = d["involvedIngredients"].list().mapNotNull { parId[it.obj().str("id")] }.joinToString(", ")
-            etapes += etape(label, impliques, e, etapes.size + 1)
+            val ids = d["involvedIngredients"].list().mapNotNull { it.obj().str("id") }
+            val produites = etape(label, impliques, e, etapes.size + 1)
+            etapes += avecPesees(produites, label, ids.filter { it !in dejaPeses }.mapNotNull { id -> pesables[id]?.let { id to it } }, dejaPeses, e)
         }
         if (e.aHacher.isNotEmpty()) {
             // Légumes jamais cuits au bol : à couper au couteau, comme Jow l'écrit.

@@ -946,5 +946,7 @@
   "Réglage non proposé par l'éditeur du robot": "Einstellung im Editor des Roboters nicht vorgesehen",
   "Durée : de %s à %s": "Dauer: %s bis %s",
   "Impulsions : de %d à %d": "Impulse: %d bis %d",
-  "Pas encore l'appli ?": "Noch keine App?"
+  "Pas encore l'appli ?": "Noch keine App?",
+  "Balance sur toutes les étapes des recettes": "Waage bei allen Rezeptschritten",
+  "Poids et Tare restent à portée sur les étapes sans pesée (« Ajoutez 600 ml d'eau… »). Masqués pendant un programme.": "Gewicht und Tara bleiben bei Schritten ohne Abwiegen verfügbar („600 ml Wasser hinzufügen…“). Während eines Programms ausgeblendet."
 }

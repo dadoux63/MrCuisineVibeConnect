@@ -983,5 +983,7 @@
   "Retirer toutes les recettes de « Cette semaine » ? Elles restent dans Mes recettes.": "Remove every recipe from “This week”? They stay in My recipes.",
   "Aucune recette prévue cette semaine.\nPartagez une recette Jow vers Toque depuis le téléphone, ou collez plusieurs liens sur la page d'import du robot.": "No recipe planned this week.\nShare a Jow recipe to Toque from your phone, or paste several links on the robot's import page.",
   "Ajoutée à « Cette semaine ».": "Added to “This week”.",
-  "Semaine vidée.": "Week cleared."
+  "Semaine vidée.": "Week cleared.",
+  "Balance sur toutes les étapes des recettes": "Scale on every recipe step",
+  "Poids et Tare restent à portée sur les étapes sans pesée (« Ajoutez 600 ml d'eau… »). Masqués pendant un programme.": "Weight and Tare stay at hand on steps without weighing (“Add 600 ml of water…”). Hidden while a programme runs."
 }

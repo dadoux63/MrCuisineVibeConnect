@@ -441,6 +441,8 @@ class SettingsScreen(a: MainActivity, private val startOn: Family? = null) : Scr
             a.machine.reconfigure { a.refusal(it) }
         }, Ui.lp(t = 8))
         p.addView(hint(tr("Toque compare la masse posée au bol vide mémorisé : un bol replacé avec du contenu n'est jamais remis à zéro.")), Ui.lp(t = 4))
+        p.addView(toggle(tr("Balance sur toutes les étapes des recettes"), a.prefs.scaleOnAllSteps) { a.prefs.scaleOnAllSteps = it }, Ui.lp(t = 12))
+        p.addView(hint(tr("Poids et Tare restent à portée sur les étapes sans pesée (« Ajoutez 600 ml d'eau… »). Masqués pendant un programme.")), Ui.lp(t = 4))
         // Le bol vide mémorisé et, à sa droite, le bouton pour l'oublier : montré seulement s'il y en a un.
         val bowlState = hint("")
         var forget: View? = null

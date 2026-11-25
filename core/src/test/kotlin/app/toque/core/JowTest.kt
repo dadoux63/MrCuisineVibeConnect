@@ -98,6 +98,29 @@ class JowTest {
         assertEquals("Du placard", placard["group"])
     }
 
+    @Test fun liquidsAndGramsAreWeighedBeforeTheRobotStep() {
+        val s = steps(Jow.convertitPage(page("essai-soupe"), "", 3, "2026-11-23"))
+        val pesees = s.filter { it["weigh"] != null }
+        // « Versez 200ml d'eau par personne » → 600 ml pour 3 ; crème liquide 50 ml × 3 ; rien pour les pièces.
+        assertEquals(listOf(600, 150), pesees.map { (it["weigh"] as Map<*, *>)["grams"] })
+        assertEquals(listOf("eau", "crème liquide"), pesees.map { (it["weigh"] as Map<*, *>)["label"] })
+        for (p in pesees) {
+            assertTrue(p["machine"] == null)
+            assertTrue(s[s.indexOf(p) + 1]["machine"] != null) // juste avant l'étape au robot
+        }
+        assertEquals("Pour l'étape suivante, pesez dans le bol : 600 ml d'eau (600 g sur la balance).", pesees[0]["text"])
+        val recipe = UserRecipes.imported(RecipeCodec.fromMap(Jow.convertitPage(page("essai-soupe"), "", 3, "2026-11-23").recipe, RecipeSource.USER)!!)
+        assertEquals(listOf(600, 150), recipe.steps.mapNotNull { it.weigh?.grams })
+    }
+
+    @Test fun nothingIsWeighedOutsideTheRobotOrForAPart() {
+        val g = steps(Jow.convertitPage(page("essai-gratin"), "", 3, "2026-11-23"))
+        for (p in g.filter { it["weigh"] != null }) assertTrue(g[g.indexOf(p) + 1]["machine"] != null)
+        val html = page("essai-soupe").replace("Remettez le poulet effiloché avec la crème.", "Remettez le poulet effiloché avec la moitié de la crème.")
+        val s = steps(Jow.convertitPage(html, "", 3, "2026-11-23"))
+        assertEquals(listOf(600), s.mapNotNull { (it["weigh"] as Map<*, *>?)?.get("grams") })
+    }
+
     @Test fun ovenFryingAndSlicingStayManual() {
         val r = Jow.convertitPage(page("essai-gratin"), "", 3, "2026-11-23")
         assertEquals(4, r.covers) // Jow ne propose que 2, 4, 6, 8
