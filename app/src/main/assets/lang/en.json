@@ -946,5 +946,7 @@
   "Réglage non proposé par l'éditeur du robot": "Setting not offered by the robot's editor",
   "Durée : de %s à %s": "Duration: %s to %s",
   "Impulsions : de %d à %d": "Pulses: %d to %d",
-  "Pas encore l'appli ?": "Don't have the app yet?"
+  "Pas encore l'appli ?": "Don't have the app yet?",
+  "Balance sur toutes les étapes des recettes": "Scale on every recipe step",
+  "Poids et Tare restent à portée sur les étapes sans pesée (« Ajoutez 600 ml d'eau… »). Masqués pendant un programme.": "Weight and Tare stay at hand on steps without weighing (“Add 600 ml of water…”). Hidden while a programme runs."
 }

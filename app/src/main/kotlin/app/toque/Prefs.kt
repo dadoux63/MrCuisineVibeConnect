@@ -130,6 +130,13 @@ class Prefs(context: Context) {
             p.edit().putBoolean("autoTareSteps", v).commit()
         }
 
+    /** Recettes : balance compacte (poids, Tare) sur les étapes sans pesée, hors programme en cours. */
+    var scaleOnAllSteps: Boolean
+        get() = p.getBoolean("scaleOnAllSteps", true)
+        set(v) {
+            p.edit().putBoolean("scaleOnAllSteps", v).commit()
+        }
+
     /** Balance remise à zéro quand le bol vide est replacé sur le socle. */
     var bowlAutoZero: Boolean
         get() = p.getBoolean("bowlAutoZero", true)

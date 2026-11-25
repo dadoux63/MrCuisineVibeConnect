@@ -946,5 +946,7 @@
   "Réglage non proposé par l'éditeur du robot": "Ajust no disponible a l'editor del robot",
   "Durée : de %s à %s": "Durada: de %s a %s",
   "Impulsions : de %d à %d": "Impulsos: de %d a %d",
-  "Pas encore l'appli ?": "Encara no tens l'app?"
+  "Pas encore l'appli ?": "Encara no tens l'app?",
+  "Balance sur toutes les étapes des recettes": "Bàscula a tots els passos de les receptes",
+  "Poids et Tare restent à portée sur les étapes sans pesée (« Ajoutez 600 ml d'eau… »). Masqués pendant un programme.": "El pes i la tara continuen a mà als passos sense pesatge («Afegiu 600 ml d'aigua…»). Amagats durant un programa."
 }

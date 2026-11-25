@@ -946,5 +946,7 @@
   "Réglage non proposé par l'éditeur du robot": "Редактор робота не пропонує це налаштування",
   "Durée : de %s à %s": "Час: від %s до %s",
   "Impulsions : de %d à %d": "Імпульси: від %d до %d",
-  "Pas encore l'appli ?": "Ще немає додатка?"
+  "Pas encore l'appli ?": "Ще немає додатка?",
+  "Balance sur toutes les étapes des recettes": "Ваги на всіх кроках рецептів",
+  "Poids et Tare restent à portée sur les étapes sans pesée (« Ajoutez 600 ml d'eau… »). Masqués pendant un programme.": "Вага й тара доступні на кроках без зважування («Додайте 600 мл води…»). Приховані під час програми."
 }
