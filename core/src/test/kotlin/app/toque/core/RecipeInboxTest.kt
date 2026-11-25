@@ -167,4 +167,22 @@ class RecipeInboxTest {
         val withPage = RecipeInbox.parseAll(Json.write(mapOf("text" to "https://jow.fr/recipes/a https://jow.fr/recipes/b", "html" to "<p>")), "application/json")
         assertEquals(listOf("https://jow.fr/recipes/a"), withPage.map { it.url })
     }
+
+    @Test fun clearTheWeekOnceForTheWholeBatch() {
+        val text = "https://jow.fr/recipes/a\nhttps://jow.fr/recipes/b\nhttps://jow.fr/recipes/c"
+        val batch = RecipeInbox.parseAll(Json.write(mapOf("text" to text, "semaine" to true, "vider" to true)), "application/json")
+        assertEquals(3, batch.size)
+        val reset = batch[0].reset!!
+        // Une seule demande de vidage, partagée par tout l'envoi.
+        assertTrue(batch.all { it.reset === reset })
+        assertTrue(!reset.cleared)
+        assertTrue(reset.claim())
+        assertTrue(!reset.claim())
+        assertTrue(!batch[2].reset!!.claim())
+        assertTrue(reset.cleared)
+        // Sans « vider » (ou à false) : rien à vider.
+        assertNull(RecipeInbox.parseAll(Json.write(mapOf("text" to text, "semaine" to true)), "application/json")[0].reset)
+        assertNull(RecipeInbox.parseAll(Json.write(mapOf("text" to text, "vider" to false)), "application/json")[0].reset)
+        assertNull(RecipeInbox.parseAll(text, "text/plain")[0].reset)
+    }
 }

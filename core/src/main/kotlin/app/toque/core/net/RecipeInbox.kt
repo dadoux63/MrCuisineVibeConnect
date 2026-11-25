@@ -33,6 +33,8 @@ import java.security.MessageDigest
  *   servir de relais vers un autre site. `"couverts"` (JSON) : nombre de personnes voulu (Cookomix et
  *   Jow) ; absent, celui du foyer réglé sur le robot.
  *   `"semaine"` (JSON) : ajouter à « Cette semaine » (par défaut : oui pour Jow, non pour Cookomix).
+ *   `"vider"` (JSON) : vider « Cette semaine » avant l'ajout, au moment où la première recette de
+ *   l'envoi y entre (rien n'est vidé si aucune n'a pu être importée).
  * - Une requête à la fois, [MAX_BATCH] recettes au plus par requête, téléchargées l'une après l'autre
  *   avec [MIN_INTERVAL_MS] entre deux : outil d'import à la demande, pas un aspirateur.
  * - Aucune commande machine : ce serveur ne connaît ni le moteur ni la chauffe. Il tourne dans le
@@ -55,6 +57,7 @@ class RecipeInbox(
      * [photo] : ajouter aussi la photo de la recette (oui par défaut ; `"photo": false` pour s'en passer).
      * [couverts] : nombre de personnes voulu ; 0 (non précisé, partage depuis le téléphone) : celui du foyer.
      * [semaine] : ajouter la recette à « Cette semaine » ; null : oui pour Jow, non pour Cookomix.
+     * [reset] : « Vider la semaine avant l'ajout », partagé par toutes les recettes d'un même envoi.
      */
     class Request(
         val url: String,
@@ -62,9 +65,23 @@ class RecipeInbox(
         val photo: Boolean = true,
         val couverts: Int = 0,
         semaine: Boolean? = null,
+        val reset: WeekReset? = null,
     ) {
         val jow: Boolean get() = Jow.URL_RECETTE.matches(url)
         val week: Boolean = semaine ?: jow
+    }
+
+    /**
+     * Vidage de « Cette semaine » demandé pour un envoi : fait une seule fois, juste avant d'y ajouter
+     * la première recette importée avec succès (un envoi entièrement en échec ne vide rien).
+     */
+    class WeekReset {
+        private var done = false
+
+        /** Vrai la première fois seulement : c'est alors à l'appelant de vider la semaine. */
+        @Synchronized fun claim(): Boolean = if (done) false else { done = true; true }
+
+        @get:Synchronized val cleared: Boolean get() = done
     }
 
     class Reply(val code: Int, val body: Map<String, Any?>) {
@@ -224,7 +241,7 @@ class RecipeInbox(
         if (ok == 0) return Reply(firstError?.code ?: 500, linkedMapOf("ok" to false,
             "error" to "aucune recette importée :\n" + lines.joinToString("\n"), "results" to results))
         val message = "$ok recette${if (ok > 1) "s" else ""} sur ${requests.size} importée${if (ok > 1) "s" else ""} dans Mes recettes" +
-            (if (requests.any { it.week }) " (et « Cette semaine »)" else "") + ", réglages à vérifier sur le robot :\n" + lines.joinToString("\n")
+            (if (requests.any { it.week }) (if (requests.any { it.reset?.cleared == true }) " (« Cette semaine » remplacée)" else " (et « Cette semaine »)") else "") + ", réglages à vérifier sur le robot :\n" + lines.joinToString("\n")
         return Reply.ok(linkedMapOf("message" to message, "imported" to ok, "total" to requests.size,
             "results" to results, "warnings" to warnings))
     }
@@ -341,7 +358,7 @@ class RecipeInbox(
         /**
          * Corps → requêtes (vide s'il ne contient aucune adresse de recette Cookomix ou Jow).
          * JSON : `url` et/ou `text`, `html` facultatif (une seule adresse alors), `photo`, `couverts`,
-         * `semaine` ; sinon le corps est un texte partagé. Plus de [MAX_BATCH] adresses : [TooMany].
+         * `semaine`, `vider` ; sinon le corps est un texte partagé. Plus de [MAX_BATCH] adresses : [TooMany].
          */
         @Throws(TooMany::class)
         fun parseAll(body: String, contentType: String): List<Request> {
@@ -353,20 +370,23 @@ class RecipeInbox(
             var photo = true
             var couverts = 0
             var semaine: Boolean? = null
+            var vider = false
             if (json != null && json.isNotEmpty()) {
                 photo = json["photo"] != false
                 (json["couverts"] as? Number)?.toInt()?.takeIf { it in 1..30 }?.let { couverts = it }
                 semaine = json["semaine"] as? Boolean
+                vider = json["vider"] == true
                 text = listOfNotNull(json.str("url"), json.str("text")).joinToString(" ")
                 html = json.str("html")?.takeIf { it.isNotBlank() }
             } else {
                 text = trimmed
             }
             val urls = findUrls(text)
+            val reset = if (vider) WeekReset() else null
             // Une page déjà téléchargée ne vaut que pour une adresse : la première.
-            if (html != null) return urls.take(1).map { Request(it, html, photo, couverts, semaine) }
+            if (html != null) return urls.take(1).map { Request(it, html, photo, couverts, semaine, reset) }
             if (urls.size > MAX_BATCH) throw TooMany("$MAX_BATCH recettes au plus par envoi (${urls.size} adresses reçues)")
-            return urls.map { Request(it, null, photo, couverts, semaine) }
+            return urls.map { Request(it, null, photo, couverts, semaine, reset) }
         }
 
         /** Page servie au téléphone : coller l'adresse, envoyer. Aucune ressource extérieure. */
@@ -395,6 +415,7 @@ details{margin-top:28px;color:var(--muted)}label.c{display:flex;gap:10px;align-i
 <input id="n" type="number" inputmode="numeric" min="1" max="30" placeholder="réglage du robot">
 <label class="c"><input id="p" type="checkbox" checked> Avec la photo de la recette</label>
 <label class="c"><input id="w" type="checkbox" checked> Ajouter à « Cette semaine »</label>
+<label class="c"><input id="v" type="checkbox"> Vider la semaine avant l'ajout</label>
 <button id="b" type="submit">Envoyer au robot</button>
 </form>
 <div id="out" role="status"></div>
@@ -404,7 +425,7 @@ details{margin-top:28px;color:var(--muted)}label.c{display:flex;gap:10px;align-i
 <small>Gardé dans ce navigateur seulement.</small></details>
 </main><script>
 (function(){
-var K='toque-jeton',P='toque-photo',N='toque-couverts',W='toque-semaine',w=document.getElementById('w'),n=document.getElementById('n'),p=document.getElementById('p'),t=document.getElementById('t'),u=document.getElementById('u'),o=document.getElementById('out'),b=document.getElementById('b');
+var K='toque-jeton',P='toque-photo',N='toque-couverts',W='toque-semaine',V='toque-vider',v=document.getElementById('v'),w=document.getElementById('w'),n=document.getElementById('n'),p=document.getElementById('p'),t=document.getElementById('t'),u=document.getElementById('u'),o=document.getElementById('out'),b=document.getElementById('b');
 function get(){try{return localStorage.getItem(K)||''}catch(e){return ''}}
 function put(v){try{localStorage.setItem(K,v)}catch(e){}}
 var m=/[#&]t=([0-9a-fA-F]{16,})/.exec(location.hash);
@@ -414,7 +435,10 @@ t.addEventListener('change',function(){put(t.value.trim())});
 try{p.checked=localStorage.getItem(P)!=='non'}catch(e){}
 p.addEventListener('change',function(){try{localStorage.setItem(P,p.checked?'oui':'non')}catch(e){}});
 try{w.checked=localStorage.getItem(W)!=='non'}catch(e){}
-w.addEventListener('change',function(){try{localStorage.setItem(W,w.checked?'oui':'non')}catch(e){}});
+w.addEventListener('change',function(){try{localStorage.setItem(W,w.checked?'oui':'non')}catch(e){};v.disabled=!w.checked});
+try{v.checked=localStorage.getItem(V)==='oui'}catch(e){}
+v.disabled=!w.checked;
+v.addEventListener('change',function(){try{localStorage.setItem(V,v.checked?'oui':'non')}catch(e){}});
 try{var c=localStorage.getItem(N);if(c&&c!=='3')n.value=c}catch(e){}
 n.addEventListener('change',function(){try{localStorage.setItem(N,n.value)}catch(e){}});
 function show(c,s){o.className=c;o.textContent=s}
@@ -422,7 +446,7 @@ document.getElementById('f').addEventListener('submit',function(ev){
  ev.preventDefault();var j=t.value.trim();put(j);
  if(!j){document.getElementById('d').open=true;show('err','Indiquez d\'abord le jeton.');return}
  b.disabled=true;show('','Téléchargement et conversion… (quelques secondes par recette)');
- fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({text:u.value.trim(),photo:p.checked,semaine:w.checked,couverts:parseInt(n.value,10)||0})})
+ fetch('$API',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+j},body:JSON.stringify({text:u.value.trim(),photo:p.checked,semaine:w.checked,vider:w.checked&&v.checked,couverts:parseInt(n.value,10)||0})})
  .then(function(r){return r.json()}).then(function(r){
   if(r.ok){var w=(r.warnings||[]);show('ok',r.message+(w.length?'\n\nÀ vérifier :\n• '+w.join('\n• '):''));u.value=''}
   else show('err',r.error||'Erreur');

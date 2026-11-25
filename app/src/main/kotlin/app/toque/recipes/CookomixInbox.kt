@@ -120,6 +120,9 @@ object CookomixInbox {
             String.format(Locale.FRANCE, "%.1f", load.grams / 1000.0))
         if (load.overKnead) warnings += tr("%d g de farine à pétrir : 500 g au plus pour une pâte lourde, 600 g pour une pâte légère", load.flourKneaded)
         // « Cette semaine » : recettes prévues (Jow par défaut), retirées de la liste une fois cuisinées.
+        // « Vider la semaine avant l'ajout » : une fois par envoi, juste avant la première recette réussie.
+        val replaced = req.week && req.reset?.claim() == true
+        if (replaced) app.recipes.clearWeek()
         if (req.week) app.recipes.addToWeek(recipe.id)
         // L'index de recherche est reconstruit à part : la réponse part tout de suite.
         Thread({
@@ -136,6 +139,7 @@ object CookomixInbox {
             (if (shown.servings > 0 && shown.servings != recipe.servings) " " + tr("Quantités pour %d personnes (recette : %d).", shown.servings, recipe.servings)
             else if (recipe.servings > 0) " " + tr("Pour %d personnes.", recipe.servings) else "") +
             (if (photo) " " + tr("Photo ajoutée.") else "") +
+            (if (replaced) " " + tr("Semaine vidée.") else "") +
             (if (req.week) " " + tr("Ajoutée à « Cette semaine ».") else "")
         return RecipeInbox.Reply.ok(linkedMapOf(
             "message" to message,
