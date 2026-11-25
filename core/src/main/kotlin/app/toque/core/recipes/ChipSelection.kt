@@ -138,7 +138,7 @@ data class ChipSelection(
         weekIds: () -> List<String> = { emptyList() },
     ): List<SearchIndex.Hit> {
         val u = usage
-        if (u != null) return RecipeChip.select(index, RecipeChip(u), query, recentIds, frequentIds, weekIds)
+        if (u != null) return RecipeChip.select(index, RecipeChip(u), query, recentIds, frequentIds, weekIds = weekIds)
         val f = filter
         val found = if (query.contains(',')) index.withIngredients(query.split(','), f) else index.search(query, f, Int.MAX_VALUE)
         return RecipeSort.apply(found, sort)
