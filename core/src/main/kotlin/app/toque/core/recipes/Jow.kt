@@ -37,7 +37,12 @@ object Jow {
     private const val REVENIR_C = 120
     private const val CUIRE_C = 100
     private const val DOUX_C = 90
+    /** Température Varoma du tableau du Connect (comme pour Cookomix). */
+    private const val VAROMA_C = 120
+    /** Pommes de terre au cuiseur vapeur : jamais moins de 25 min, et 10 min de plus que la cuisson à l'eau de Jow. */
+    private const val VAPEUR_MIN_S = 25 * 60
     private const val DUREE_MAX_S = 99 * 60
+    private const val RETIRER_VAPEUR = "Retirer le cuiseur vapeur avec les pommes de terre (déjà égouttées) et vider l'eau du bol."
 
     /** Page de recette jow.fr (identifiant ou nom lisible), en HTTPS. */
     val URL_RECETTE = Regex("^https://(www\\.)?jow\\.fr/recipes/[A-Za-z0-9-]+(\\?[^#]*)?$")
@@ -154,7 +159,7 @@ object Jow {
                 val cible = sa(st["text"] as? String ?: "")
                 val liste = ArrayList<Pesee>()
                 // « Égoutter … et remettre dans le bol » : rien ne se verse dans le bol avant d'avoir égoutté.
-                if (Regex("\\begoutt").containsMatchIn(cible)) { out += st; continue }
+                if (Regex("\\begoutt|cuiseur vapeur").containsMatchIn(cible)) { out += st; continue }
                 // Un ingrédient de l'étape Jow va dans la première étape au robot qui le nomme (« Avec : … » ou le texte).
                 for ((id, p) in candidats) {
                     if (id in dejaPeses) continue
@@ -209,6 +214,8 @@ object Jow {
         /** La préparation vient d'être égouttée hors du bol (étape précédente). */
         var egouttee = false
         var poeleSeule = false
+        /** Pommes de terre dans le cuiseur vapeur posé sur le couvercle, de l'eau dans le bol. */
+        var vapeur = false
 
         /** Le hachis ne sert pas à l'étape qui suit dans le bol : on le réserve. */
         fun reserveHachis() {
@@ -309,7 +316,7 @@ object Jow {
             return linkedMapOf("text" to t, "machine" to machine(minOf(sec, DUREE_MAX_S), tempC, vitesse, inverse, fouet), "needsReview" to true)
         }
         fun texteSeul(t: String): Map<String, Any?> = linkedMapOf("text" to t)
-        fun libere() { e.bolOccupe = false; e.dansLeau = false; e.eauChaude = false; e.froid = false }
+        fun libere() { e.bolOccupe = false; e.dansLeau = false; e.eauChaude = false; e.froid = false; e.vapeur = false }
 
         /** Légumes en attente, hachés ensemble ; [garde] : le hachis reste dans le bol pour la suite. */
         fun hachageDiffere(garde: Boolean): List<Map<String, Any?>> {
@@ -382,9 +389,9 @@ object Jow {
             val avec = Regex("\\bavec ([^.]+?)\\.").find(brut)?.groupValues?.get(1)?.trim()
             val quoi = if (pdt) "les pommes de terre" else "les légumes"
             val dejaDansLeBol = e.bolOccupe && !e.dansLeau
-            val propre = (if (dejaDansLeBol) "" else if (e.egouttee) "Remettre la préparation dans le bol" + (if (avec != null) ", avec $avec" else "") + "." else "Égoutter $quoi et les remettre dans le bol, sans l'eau" + (if (avec != null) ", avec $avec" else "") + ".") +
+            val propre = (if (dejaDansLeBol) "" else if (e.vapeur) "Retirer le cuiseur vapeur, vider l'eau du bol et y mettre $quoi" + (if (avec != null) ", avec $avec" else "") + "." else if (e.egouttee) "Remettre la préparation dans le bol" + (if (avec != null) ", avec $avec" else "") + "." else "Égoutter $quoi et les remettre dans le bol, sans l'eau" + (if (avec != null) ", avec $avec" else "") + ".") +
                 (if (pdt) " Mettre le fouet." else "")
-            e.bolOccupe = true; e.dansLeau = false
+            e.bolOccupe = true; e.dansLeau = false; e.vapeur = false
             return if (pdt) listOf(
                 robot("Écraser en purée", 30, 0, 3, false, listOf("au fouet, vitesse 3 : prolonger de 10 s si des morceaux restent"), propre = propre.trim(), fouet = true),
                 texteSeul("Retirer le fouet."))
@@ -395,6 +402,25 @@ object Jow {
         if (Regex("eau bouillante|dans l'eau chaude").containsMatchIn(s) && Regex("\\b(cuire|cuisez|plongez|ajoutez)").containsMatchIn(s)) {
             if (e.bolOccupe && !e.eauChaude) return main("hors robot : le bol est occupé")
             val avant = bolVide()
+            // Pommes de terre : au cuiseur vapeur (Varoma) posé sur le couvercle plutôt que dans l'eau bouillante.
+            val quoiCuit = Regex("\\b(pâtes|tagliatelle|spaghetti|penne|fusilli|coquillettes|riz|pommes de terre|gnocchis?|ravioles?|ravioli|tortellini|brocolis?|haricots verts|petits pois|chou-fleur|carottes?|légumes)\\b", I)
+                .find(brut)?.value?.lowercase()
+            if (quoiCuit == "pommes de terre") {
+                val out = ArrayList<Map<String, Any?>>(avant)
+                val d = duree(brut)
+                val cuisson = maxOf(VAPEUR_MIN_S, (d ?: 15 * 60) + 10 * 60)
+                val eau = if (e.eauChaude) "Garder l'eau chaude dans le bol." else "Verser 500 ml d'eau dans le bol."
+                e.bolOccupe = true; e.dansLeau = true; e.eauChaude = false; e.vapeur = true
+                out += robot("Cuire à la vapeur", cuisson, VAROMA_C, 1, false,
+                    listOf("au cuiseur vapeur plutôt qu'à l'eau bouillante : morceaux de même taille, vérifier la cuisson à la pointe du couteau"),
+                    propre = "$eau Mettre les pommes de terre dans le cuiseur vapeur (équivalent du Varoma), le poser sur le couvercle et le fermer.")
+                if (egoutte) {
+                    out += texteSeul(RETIRER_VAPEUR)
+                    libere()
+                    e.egouttee = true
+                }
+                return out
+            }
             val notes = ArrayList<String>()
             val feculent = FECULENTS.containsMatchIn(s)
             val p = (if (feculent) e.pates else null) ?: 300.0
@@ -596,6 +622,11 @@ object Jow {
         }
 
         // 10. Le reste : à la main.
+        if (e.vapeur && egoutte) {
+            libere()
+            e.egouttee = true
+            return listOf(texteSeul(RETIRER_VAPEUR))
+        }
         if (Regex("\\b(reservez(?!-en)|egouttez|transvasez|versez (le tout |la preparation )?dans (un|le) (plat|saladier|moule))").containsMatchIn(s) ||
             (ailleurs && Regex("\\b(ajoutez|disposez|versez|placez)\\b").containsMatchIn(s) && !e.dansLeau)) {
             if (e.bolOccupe) libere()

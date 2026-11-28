@@ -150,4 +150,24 @@ class JowTest {
         assertEquals(0, m["tempC"])
         assertEquals("Retirer le fouet.", s[s.indexOf(puree) + 1]["text"])
     }
+
+    @Test fun potatoesAreSteamedInsteadOfBoiled() {
+        val html = page("essai-gratin").replace(
+            "Dans une casserole d'eau bouillante salée, faites cuire les pâtes selon les indications du paquet, puis égouttez-les.",
+            "Dans une casserole d'eau bouillante salée, faites cuire les pommes de terre 20 minutes.")
+            .replace("Servez dès la sortie du four.", "Égouttez les pommes de terre puis écrasez-les en purée avec le beurre.")
+        val s = steps(Jow.convertitPage(html, "", 3, "2026-11-23"))
+        val vapeur = s.first { (it["text"] as String).contains("Cuire à la vapeur") }
+        val m = vapeur["machine"] as Map<*, *>
+        assertEquals(120, m["tempC"])
+        assertEquals(30 * 60, m["seconds"])       // 20 min à l'eau + 10 min, jamais moins de 25 min
+        assertEquals(false, m["reverse"])
+        assertTrue((vapeur["text"] as String).contains("cuiseur vapeur"))
+        assertTrue(s.none { (it["text"] as String).contains("dans l'eau bouillante") })
+        // Pas de pesée « dans le bol » pour des pommes de terre posées dans le cuiseur vapeur.
+        val avant = s.getOrNull(s.indexOf(vapeur) - 1)?.get("text") as String?
+        assertTrue(avant == null || !avant.contains("pommes de terre", ignoreCase = true) || !avant.contains("Pesez"))
+        val puree = s.first { (it["text"] as String).contains("Écraser en purée") }
+        assertTrue((puree["text"] as String).contains("Retirer le cuiseur vapeur"))
+    }
 }
