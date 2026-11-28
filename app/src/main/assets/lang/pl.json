@@ -1039,7 +1039,6 @@
   "Ce téléphone est en lecture seule : les commandes se font sur le robot": "Ten telefon jest tylko do odczytu: sterowanie odbywa się na robocie",
   "Programmes affichés sur l'écran Programmes :": "Programy widoczne na ekranie Programy:",
   "Gardez au moins un programme affiché": "Zostaw widoczny co najmniej jeden program",
-  "Autres": "Inne",
   "Domotique": "Automatyka domowa",
   "Publier l'état sur le réseau local": "Publikuj stan w sieci lokalnej",
   "Lecture seule : température, vitesse, poids, couvercle, bol, programme et temps restant. Personne ne peut lancer, arrêter ni régler le robot par le réseau. À n'activer que sur un Wi-Fi de confiance.": "Tylko odczyt: temperatura, prędkość, waga, pokrywa, misa, program i pozostały czas. Nikt nie może uruchomić, zatrzymać ani ustawić robota przez sieć. Włączaj tylko w zaufanej sieci Wi-Fi.",

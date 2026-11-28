@@ -155,7 +155,8 @@ class JowTest {
         val html = page("essai-gratin").replace(
             "Dans une casserole d'eau bouillante salée, faites cuire les pâtes selon les indications du paquet, puis égouttez-les.",
             "Dans une casserole d'eau bouillante salée, faites cuire les pommes de terre 20 minutes.")
-            .replace("Servez dès la sortie du four.", "Égouttez les pommes de terre puis écrasez-les en purée avec le beurre.")
+            .replace("Dans un plat, mélangez les pâtes, la courgette et le jambon. Parsemez de parmesan et enfournez 20 minutes.",
+                "Égouttez les pommes de terre puis écrasez-les en purée avec le beurre.")
         val s = steps(Jow.convertitPage(html, "", 3, "2026-11-23"))
         val vapeur = s.first { (it["text"] as String).contains("Cuire à la vapeur") }
         val m = vapeur["machine"] as Map<*, *>
