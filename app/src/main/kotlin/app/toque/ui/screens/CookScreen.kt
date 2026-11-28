@@ -189,7 +189,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
             if (curW > 5) {
                 val time = java.text.SimpleDateFormat("HH:mm", java.util.Locale.getDefault()).format(java.util.Date())
                 val ing = recipe.steps.getOrNull(index)?.weigh?.label ?: recipe.steps.getOrNull(index)?.text?.take(30)
-                ScaleScreen.history.add(ScaleScreen.WeightEntry(time, curW, ing))
+                ScaleScreen.recordHistory(ScaleScreen.WeightEntry(time, curW, ing))
             }
             tally.tare(curW)
             a.machine.tare()
@@ -461,6 +461,8 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
             val rb = Ui.button(c, tr("J'ai vérifié ce réglage"), Ui.Style.GHOST, Icon.Kind.CHECK, height = 56, textSize = 17f) {
                 reviewed += index
                 a.prefs.reviewedSteps = a.prefs.reviewedSteps + reviewKey(index)
+                // Réglage du propriétaire venu d'un téléphone (recette Mealie) : vérifié ici, il devient le sien.
+                if (step.reviewAlone) a.app.recipes.confirmStepSetting(recipe.id, index, step.machine)
                 buildPanel()
                 onSnapshot(a.snapshot)
             }
@@ -916,11 +918,12 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         }
     }
 
-    private fun endSession(completed: Boolean) {
+    /** [resumable] : la recette reste proposée sur l'accueil (« Reprendre ») ; les téléphones la voient en attente. */
+    private fun endSession(completed: Boolean, resumable: Boolean = false) {
         if (sessionEnded) return
         sessionEnded = true
         try {
-            a.app.companion?.hub?.endSession(completed)
+            a.app.companion?.hub?.endSession(completed, resumable)
         } catch (t: Throwable) {
             a.app.log.write("compagnon", "fin de session : $t")
         }
@@ -935,7 +938,7 @@ class CookScreen(a: MainActivity, private val recipe: Recipe, startStep: Int) : 
         unsubTimers = null
         view.post {
             if (!a.isOnStack(this)) {
-                endSession(completed = false)
+                endSession(completed = false, resumable = a.prefs.guidedRecipe == recipe.id)
                 // Domotique : plus de recette affichée.
                 a.machine.reportRecipe(null)
             }
